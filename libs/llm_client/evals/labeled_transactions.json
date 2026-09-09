@@ -1,0 +1,306 @@
+{
+  "description": "Labeled categorization sample. Labels are the category a careful human would assign; they are the ground truth for `scripts/eval_categorization.py`.",
+  "prompt_version": "v1",
+  "samples": [
+    {
+      "description": "STARBUCKS #1234 SEATTLE WA",
+      "amount": -6.75,
+      "expected": "dining_coffee"
+    },
+    {
+      "description": "BLUE BOTTLE COFFEE 22",
+      "amount": -5.4,
+      "expected": "dining_coffee"
+    },
+    {
+      "description": "DOORDASH*CHIPOTLE",
+      "amount": -28.15,
+      "expected": "dining_coffee"
+    },
+    {
+      "description": "SQ *NEIGHBOURHOOD BAKERY",
+      "amount": -18.4,
+      "expected": "dining_coffee"
+    },
+    {
+      "description": "TST* THE NOODLE HOUSE",
+      "amount": -34.1,
+      "expected": "dining_coffee"
+    },
+    {
+      "description": "WHOLE FOODS MKT #10245",
+      "amount": -132.88,
+      "expected": "groceries"
+    },
+    {
+      "description": "TRADER JOE'S #451 PORTLAND OR",
+      "amount": -64.2,
+      "expected": "groceries"
+    },
+    {
+      "description": "SAFEWAY STORE 4486",
+      "amount": -37.28,
+      "expected": "groceries"
+    },
+    {
+      "description": "INSTACART*SHOPPER",
+      "amount": -88.15,
+      "expected": "groceries"
+    },
+    {
+      "description": "H-E-B #221 AUSTIN TX",
+      "amount": -54.9,
+      "expected": "groceries"
+    },
+    {
+      "description": "UBER *TRIP 08/14",
+      "amount": -23.4,
+      "expected": "transport"
+    },
+    {
+      "description": "LYFT *RIDE",
+      "amount": -27.33,
+      "expected": "transport"
+    },
+    {
+      "description": "MTA*NYCT PAYGO",
+      "amount": -2.9,
+      "expected": "transport"
+    },
+    {
+      "description": "CITY PARKING GARAGE 12",
+      "amount": -18.0,
+      "expected": "transport"
+    },
+    {
+      "description": "SHELL OIL 57442136",
+      "amount": -52.1,
+      "expected": "fuel"
+    },
+    {
+      "description": "CHEVRON 00201234",
+      "amount": -61.44,
+      "expected": "fuel"
+    },
+    {
+      "description": "ELECTRIFY AMERICA CHARGE",
+      "amount": -19.8,
+      "expected": "fuel"
+    },
+    {
+      "description": "AMAZON.COM*2H4KD9 AMZN.COM/BILL",
+      "amount": -42.99,
+      "expected": "shopping"
+    },
+    {
+      "description": "TARGET T-2214 SAN JOSE CA",
+      "amount": -88.31,
+      "expected": "shopping"
+    },
+    {
+      "description": "IKEA EMERYVILLE",
+      "amount": -240.0,
+      "expected": "shopping"
+    },
+    {
+      "description": "NIKE.COM ORDER",
+      "amount": -120.0,
+      "expected": "shopping"
+    },
+    {
+      "description": "BEST BUY #221",
+      "amount": -1349.99,
+      "expected": "electronics"
+    },
+    {
+      "description": "APPLE STORE R053",
+      "amount": -1899.0,
+      "expected": "electronics"
+    },
+    {
+      "description": "MICRO CENTER ONLINE",
+      "amount": -329.5,
+      "expected": "electronics"
+    },
+    {
+      "description": "NETFLIX.COM",
+      "amount": -15.49,
+      "expected": "subscriptions"
+    },
+    {
+      "description": "SPOTIFY USA",
+      "amount": -11.99,
+      "expected": "subscriptions"
+    },
+    {
+      "description": "OPENAI *CHATGPT SUBSCR",
+      "amount": -20.0,
+      "expected": "subscriptions"
+    },
+    {
+      "description": "GITHUB.COM PLAN",
+      "amount": -4.0,
+      "expected": "subscriptions"
+    },
+    {
+      "description": "AMC THEATRES #4412",
+      "amount": -32.0,
+      "expected": "entertainment"
+    },
+    {
+      "description": "TICKETMASTER EVENT",
+      "amount": -186.0,
+      "expected": "entertainment"
+    },
+    {
+      "description": "STEAM GAMES PURCHASE",
+      "amount": -59.99,
+      "expected": "entertainment"
+    },
+    {
+      "description": "COMCAST XFINITY",
+      "amount": -79.99,
+      "expected": "utilities"
+    },
+    {
+      "description": "PG&E ELECTRIC PAYMENT",
+      "amount": -164.22,
+      "expected": "utilities"
+    },
+    {
+      "description": "T-MOBILE POSTPAID",
+      "amount": -85.0,
+      "expected": "utilities"
+    },
+    {
+      "description": "CITY WATER DEPT AUTOPAY",
+      "amount": -46.1,
+      "expected": "utilities"
+    },
+    {
+      "description": "GREENFIELD APARTMENTS RENT",
+      "amount": -2450.0,
+      "expected": "housing"
+    },
+    {
+      "description": "WELLS MORTGAGE PAYMENT",
+      "amount": -1980.0,
+      "expected": "housing"
+    },
+    {
+      "description": "OAKRIDGE HOA DUES",
+      "amount": -320.0,
+      "expected": "housing"
+    },
+    {
+      "description": "CVS/PHARMACY #8891",
+      "amount": -24.6,
+      "expected": "health"
+    },
+    {
+      "description": "WALGREENS #4412 DENVER CO",
+      "amount": -18.2,
+      "expected": "health"
+    },
+    {
+      "description": "EQUINOX FITNESS",
+      "amount": -185.0,
+      "expected": "health"
+    },
+    {
+      "description": "BAY AREA DENTAL CARE",
+      "amount": -240.0,
+      "expected": "health"
+    },
+    {
+      "description": "DELTA AIR LINES 0062",
+      "amount": -412.3,
+      "expected": "travel"
+    },
+    {
+      "description": "MARRIOTT HOTELS SFO",
+      "amount": -389.0,
+      "expected": "travel"
+    },
+    {
+      "description": "AIRBNB * HMQ4T2",
+      "amount": -640.0,
+      "expected": "travel"
+    },
+    {
+      "description": "HERTZ RENT A CAR",
+      "amount": -212.75,
+      "expected": "travel"
+    },
+    {
+      "description": "COURSERA *COURSE",
+      "amount": -49.0,
+      "expected": "education"
+    },
+    {
+      "description": "STATE UNIVERSITY TUITION",
+      "amount": -1200.0,
+      "expected": "education"
+    },
+    {
+      "description": "CAMPUS BOOKSTORE",
+      "amount": -142.0,
+      "expected": "education"
+    },
+    {
+      "description": "MONTHLY SERVICE FEE",
+      "amount": -12.0,
+      "expected": "fees"
+    },
+    {
+      "description": "ATM FEE WITHDRAWAL",
+      "amount": -3.5,
+      "expected": "fees"
+    },
+    {
+      "description": "FOREIGN TRANSACTION FEE",
+      "amount": -1.85,
+      "expected": "fees"
+    },
+    {
+      "description": "ACME CORP DIRECT DEPOSIT PAYROLL",
+      "amount": 4200.0,
+      "expected": "income"
+    },
+    {
+      "description": "IRS TREAS 310 TAX REFUND",
+      "amount": 812.0,
+      "expected": "income"
+    },
+    {
+      "description": "INTEREST PAID",
+      "amount": 3.21,
+      "expected": "income"
+    },
+    {
+      "description": "ONLINE TRANSFER TO SAVINGS",
+      "amount": -500.0,
+      "expected": "transfers"
+    },
+    {
+      "description": "ZELLE PAYMENT TO J SMITH",
+      "amount": -120.0,
+      "expected": "transfers"
+    },
+    {
+      "description": "VENMO CASHOUT",
+      "amount": 60.0,
+      "expected": "transfers"
+    },
+    {
+      "description": "LUXURY WATCH BOUTIQUE",
+      "amount": -4820.0,
+      "expected": "shopping"
+    },
+    {
+      "description": "QUIETRIDGE VENDOR 88",
+      "amount": -73.0,
+      "expected": "other"
+    }
+  ]
+}
