@@ -38,16 +38,31 @@ A portfolio-grade backend platform that demonstrates how to combine large langua
 
 ## Service Architecture (at a glance)
 
-```
-                        ┌────────────────────────────┐
-                        │   FastAPI Microservices     │
-                        │  LLM-integrated request      │
-                        │        handling              │
-                        └──────────────┬───────────────┘
-                                       │
-        ┌──────────────┬──────────────┼──────────────┬──────────────┐
-        │              │              │              │              │
-   OpenAI APIs     PostgreSQL       Redis        Kafka events   Docker·K8s·AWS
+```mermaid
+flowchart LR
+    browser[React dashboard] -->|HTTPS /api/v1| gateway[FastAPI gateway]
+    gateway -->|JWT-protected HTTP| transactions[Transactions]
+    gateway --> assistant[Assistant]
+    gateway --> insights[Insights]
+    gateway --> notifications[Notifications]
+
+    transactions --> postgres[(PostgreSQL)]
+    assistant --> postgres
+    insights --> postgres
+    notifications --> postgres
+
+    gateway --> redis[(Redis)]
+    transactions --> redis
+    assistant --> redis
+    insights --> redis
+
+    transactions -->|publishes events| kafka[(Kafka)]
+    kafka -->|consumes events| notifications
+
+    transactions -. optional provider call .-> llm[Shared LLM client]
+    assistant -. optional provider call .-> llm
+    insights -. optional provider call .-> llm
+    llm -. redacted prompts .-> openai[OpenAI API]
 ```
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full breakdown of services, data flow, and design decisions.
@@ -72,7 +87,6 @@ financial-ai-platform/
 ├── infra/
 │   ├── docker/                # Dockerfiles, docker-compose.yml
 │   ├── k8s/                   # Deployment, service, ingress manifests
-│   └── terraform/             # AWS infra as code (EKS, RDS, MSK, ElastiCache)
 ├── tests/
 │   ├── unit/
 │   ├── integration/
