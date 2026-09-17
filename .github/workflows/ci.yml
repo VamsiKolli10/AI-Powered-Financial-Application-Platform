@@ -16,7 +16,7 @@ jobs:
   manifests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Render Kubernetes manifests
         run: kubectl kustomize infra/k8s > /dev/null
 
@@ -26,8 +26,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,18 +38,18 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
       - run: uv python install 3.12
-      - run: uv pip install --system -e ".[dev]"
+      - run: uv sync --locked --extra dev
       - name: ruff
-        run: ruff check .
+        run: uv run ruff check .
       - name: black
-        run: black --check .
+        run: uv run black --check .
       - name: mypy
-        run: mypy libs services
+        run: uv run mypy libs services
 
   test:
     runs-on: ubuntu-latest
@@ -77,19 +77,19 @@ jobs:
       KAFKA_ENABLED: "false"
       LLM_ENABLED: "false"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
       - run: uv python install 3.12
-      - run: uv pip install --system -e ".[dev]"
+      - run: uv sync --locked --extra dev
       - name: Run migrations
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
       - name: Unit + integration tests
-        run: pytest -v --cov=libs --cov=services --cov-report=term-missing
+        run: uv run pytest -v --cov=libs --cov=services --cov-report=term-missing
 
       - name: Categorization accuracy (rules engine, no provider calls)
-        run: python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
+        run: uv run python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
 
   build-images:
     needs: [dashboard, lint, manifests, test]
@@ -99,10 +99,10 @@ jobs:
       matrix:
         service: [gateway, transactions, assistant, insights, notifications]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Build image (${{ matrix.service }})
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/Dockerfile
