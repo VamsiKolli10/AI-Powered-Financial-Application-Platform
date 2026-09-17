@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: financial-ai
+
+resources:
+  - ../k8s
+
+configMapGenerator:
+  - name: platform-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=staging
+      - KAFKA_SECURITY_PROTOCOL=SASL_SSL
+      - KAFKA_SASL_MECHANISM=SCRAM-SHA-512
+
+patches:
+  - path: managed-services-patch.yaml
+  - target:
+      kind: Secret
+      name: platform-secrets
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: platform-secrets
+  - target: { kind: Service, name: postgres }
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata: { name: postgres }
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata: { name: postgres }
+  - target: { kind: Service, name: redis }
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata: { name: redis }
+  - target: { kind: Deployment, name: redis }
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: redis }
+  - target: { kind: Service, name: kafka }
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata: { name: kafka }
+  - target: { kind: StatefulSet, name: kafka }
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata: { name: kafka }
+
+images:
+  - name: financial-ai-platform/backend
+    newName: financial-ai-platform/backend
+    newTag: replace-at-deploy
+  - name: financial-ai-platform/dashboard
+    newName: financial-ai-platform/dashboard
+    newTag: replace-at-deploy

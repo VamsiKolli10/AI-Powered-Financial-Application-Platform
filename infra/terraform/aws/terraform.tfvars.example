@@ -1,0 +1,20 @@
+aws_region  = "us-east-1"
+environment = "staging"
+
+# Cost-conscious staging default. Use one NAT gateway per AZ for production resilience.
+single_nat_gateway = true
+
+# Keep the EKS API private by default. If public access is necessary, restrict it.
+cluster_endpoint_public_access       = false
+cluster_endpoint_public_access_cidrs = []
+
+node_instance_types = ["t3.medium"]
+node_min_size       = 2
+node_desired_size   = 2
+node_max_size       = 4
+
+database_multi_az            = false
+database_deletion_protection = false
+
+# Supply through TF_VAR_openai_api_key or a protected CI secret; never commit it.
+openai_api_key = ""

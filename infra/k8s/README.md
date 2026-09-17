@@ -43,8 +43,9 @@ keeps the default setup controller-independent.
 
 ## Production boundary
 
-The generated secrets and in-cluster data services are for local development only. A production
-overlay should use managed PostgreSQL/Redis/Kafka, External Secrets backed by AWS Secrets Manager,
-immutable registry tags, network policies, PodDisruptionBudgets, persistent volumes, cert-manager,
-and a real DNS name. EKS and Terraform are not represented as complete until those resources have
-been provisioned and exercised.
+The generated secrets and in-cluster data services are for local development only. The
+[`../k8s-aws`](../k8s-aws) overlay removes them and connects the workloads to Terraform-managed
+RDS, ElastiCache and MSK using credentials retrieved from AWS Secrets Manager at deploy time. It
+also replaces local image tags with immutable ECR tags. Network policies, PodDisruptionBudgets,
+cert-manager, DNS and a live environment exercise remain production follow-ups. Infrastructure
+code is not represented as a currently running AWS environment.
