@@ -18,7 +18,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Render Kubernetes manifests
-        run: kubectl kustomize infra/k8s > /dev/null
+        run: |
+          kubectl kustomize infra/k8s > /dev/null
+          kubectl kustomize infra/k8s-aws > /dev/null
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/aws
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - run: terraform test
 
   dashboard:
     runs-on: ubuntu-latest
@@ -92,7 +109,7 @@ jobs:
         run: uv run python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
 
   build-images:
-    needs: [dashboard, lint, manifests, test]
+    needs: [dashboard, lint, manifests, terraform, test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:

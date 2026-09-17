@@ -7,7 +7,7 @@ This platform demonstrates a production-style pattern for embedding LLMs inside 
 1. **Correctness of financial data** — the LLM never directly writes ledger data; it only annotates, summarizes, or advises. All money-affecting writes go through deterministic, testable service code.
 2. **Responsiveness under load** — AI calls are slow and rate-limited relative to a DB write, so the system is designed around caching and async/event-driven processing rather than synchronous LLM calls on the hot path wherever avoidable.
 3. **Service independence** — each microservice owns its own data and can be deployed, scaled, and tested independently.
-4. **Observability & repeatable delivery** — every service ships with health checks, structured logs, and a CI/CD pipeline; nothing is deployed by hand.
+4. **Observability & repeatable delivery** — every service ships with health checks, structured logs, CI validation, and a scripted deployment path.
 
 **Non-goals:** this is not a payments processor (no money movement/settlement), and it does not aim for PCI-DSS compliance — it's a portfolio demonstration of architecture patterns, not a licensed financial product.
 
@@ -124,3 +124,34 @@ This flow keeps the **synchronous request path fast** (a client gets a `202 Acce
 - JWT-based auth at the Gateway; downstream services trust a signed internal service token, not the end-user token, for service-to-service calls.
 - No raw PII/account numbers are sent to the LLM provider — transaction descriptions are normalized/redacted before being included in prompts.
 - Secrets (OpenAI API key, DB credentials) are managed via K8s Secrets / AWS Secrets Manager, never committed to the repo.
+
+---
+
+## 8. AWS Deployment Topology
+
+```mermaid
+flowchart TB
+    internet[HTTPS clients] --> ingress[EKS ingress]
+
+    subgraph vpc[AWS VPC]
+        subgraph eks[EKS private subnets]
+            ingress --> dashboard[React dashboard]
+            dashboard --> gateway[API gateway]
+            gateway --> services[Transactions · Assistant · Insights · Notifications]
+        end
+
+        services --> rds[(RDS PostgreSQL)]
+        services --> redis[(ElastiCache Redis TLS)]
+        services --> msk[(Amazon MSK TLS + SCRAM)]
+    end
+
+    ecr[(Amazon ECR)] --> eks
+    secrets[AWS Secrets Manager] -->|deploy-time secret materialization| eks
+    logs[CloudWatch Logs] --- msk
+```
+
+Terraform creates the VPC, EKS, ECR, RDS, ElastiCache, MSK, KMS, security groups, logs and
+Secrets Manager resources. The EKS API and managed data services are private by default. The
+checked-in deployment script retrieves secrets without printing them, publishes immutable images,
+applies the managed-service Kustomize overlay and waits for readiness. This diagram describes the
+implemented deployment target; it is not a claim that a live AWS environment currently exists.

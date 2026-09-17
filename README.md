@@ -31,7 +31,7 @@ A portfolio-grade backend platform that demonstrates how to combine large langua
 | Containerization | **Docker** | Local dev parity, reproducible builds |
 | Web client | **React + TypeScript** | Financial overview, transactions, alerts, and assistant |
 | Orchestration | **Kubernetes (K8s)** | Local manifests, probes, resource limits, and HPA |
-| Cloud target | **AWS** (EKS, RDS, ElastiCache, MSK) | Planned; infrastructure is not implemented yet |
+| Cloud target | **AWS** (EKS, RDS, ElastiCache, MSK, ECR) | Terraform and deployment overlay implemented; not provisioned live |
 | CI | **GitHub Actions** | Automated backend tests, dashboard build, manifest render, and image builds |
 
 ---
@@ -87,6 +87,8 @@ financial-ai-platform/
 ├── infra/
 │   ├── docker/                # Dockerfiles, docker-compose.yml
 │   ├── k8s/                   # Deployment, service, ingress manifests
+│   ├── k8s-aws/               # Managed-service overlay for EKS
+│   └── terraform/aws/         # VPC, EKS, RDS, ElastiCache, MSK, ECR, secrets
 ├── tests/
 │   ├── unit/
 │   ├── integration/
@@ -287,7 +289,7 @@ npm run dev
 
 - Developed Python and FastAPI microservices that integrate LLM APIs with PostgreSQL, Redis, and Kafka to automate financial workflows end to end.
 - Implemented backend API integration, event-driven processing, and caching to keep AI-enabled services responsive under load.
-- Covered delivery with automated testing, containerization, and cloud deployment for reliable, repeatable releases.
+- Covered delivery with automated testing, containerization, Kubernetes manifests, and validated AWS infrastructure definitions.
 
 ---
 
@@ -298,6 +300,7 @@ npm run dev
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | System design, service boundaries, data flow, key decisions |
 | [`BUILD_PLAN.md`](./BUILD_PLAN.md) | Phased roadmap for building this out, milestone by milestone |
 | [`API_DESIGN.md`](./API_DESIGN.md) | Endpoint reference, auth, request/response contracts |
+| [`infra/terraform/aws/README.md`](./infra/terraform/aws/README.md) | AWS architecture, cost boundary, plan/apply and deployment procedure |
 
 ---
 
@@ -315,7 +318,7 @@ npm run dev
 | 5 — Assistant service (conversational Q&A) | ✅ Complete |
 | 6 — Gateway, auth, rate limiting, observability | ✅ Complete |
 | 7 — Kubernetes manifests and local `kind` deploy | ✅ Complete |
-| 8 — CI/CD and cloud deployment | 🟡 CI implemented; AWS deployment planned |
+| 8 — CI/CD and cloud deployment | 🟡 CI and AWS Terraform implemented; live AWS deployment not yet executed |
 | 9 — Portfolio polish | 🟡 React dashboard implemented; media/live demo planned |
 
 ## License

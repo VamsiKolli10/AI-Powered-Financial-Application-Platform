@@ -171,12 +171,16 @@ infrastructure exists.
 
 **Goal:** push-to-deploy on AWS, with a real test pyramid behind it.
 
-- [ ] Unit tests (fast, per-service) — target meaningful coverage on business logic, not a vanity percentage
-- [ ] Integration tests (service + real Postgres/Redis/Kafka via testcontainers)
+- [x] Unit tests (fast, per-service) — meaningful coverage on business logic, not a vanity percentage
+- [ ] Integration tests with real Postgres/Redis/Kafka (Postgres and Redis run in CI; live Kafka remains)
 - [ ] Load tests (Locust or k6) against the categorization and assistant endpoints — these are the latency-sensitive paths
 - [ ] GitHub Actions: lint → test → build image → push to ECR → deploy to EKS
-- [ ] Terraform for AWS infra: EKS cluster, RDS (Postgres), ElastiCache (Redis), MSK (Kafka)
-- [ ] Rollout strategy: rolling updates with readiness probes; document rollback steps
+- [x] Terraform for AWS infra: VPC, EKS, RDS (Postgres), ElastiCache (Redis), MSK (Kafka), ECR and Secrets Manager
+- [x] Rollout strategy: rolling updates with readiness probes and documented rollback steps
+
+**Current boundary:** Terraform and the EKS deployment path are checked in and validated in CI,
+but no AWS environment is claimed as live. Provisioning requires explicit credentials, a remote
+state backend, cost review, and a machine or runner that can reach the private EKS endpoint.
 
 **Done when:** a merge to `main` triggers a full pipeline that deploys to a live EKS cluster, and you can demo the platform at a public/staging URL.
 
