@@ -8,6 +8,10 @@ venv/
 *.egg-info/
 dist/
 build/
+**/node_modules/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

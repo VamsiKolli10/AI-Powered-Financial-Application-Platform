@@ -20,6 +20,15 @@ x-healthcheck: &app-healthcheck
     start_period: 20s
 
 services:
+  dashboard:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      gateway: { condition: service_healthy }
+    ports: ["3000:80"]
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:

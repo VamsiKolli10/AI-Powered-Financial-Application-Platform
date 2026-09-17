@@ -13,6 +13,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -70,7 +85,7 @@ jobs:
         run: python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
 
   build-images:
-    needs: [lint, test]
+    needs: [dashboard, lint, test]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     strategy:
