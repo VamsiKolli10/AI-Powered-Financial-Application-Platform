@@ -29,9 +29,10 @@ A portfolio-grade backend platform that demonstrates how to combine large langua
 | Cache / session store | **Redis** | LLM response caching, rate limiting, session state |
 | Event bus | **Apache Kafka** | Transaction events, notification triggers, async workflows |
 | Containerization | **Docker** | Local dev parity, reproducible builds |
-| Orchestration | **Kubernetes (K8s)** | Service scaling, health checks, rolling deploys |
-| Cloud | **AWS** (EKS, RDS, ElastiCache, MSK) | Managed infrastructure |
-| CI/CD | **GitHub Actions** | Automated tests, image builds, deploy pipeline |
+| Web client | **React + TypeScript** | Financial overview, transactions, alerts, and assistant |
+| Orchestration | **Kubernetes (K8s)** | Local manifests, probes, resource limits, and HPA |
+| Cloud target | **AWS** (EKS, RDS, ElastiCache, MSK) | Planned; infrastructure is not implemented yet |
+| CI | **GitHub Actions** | Automated backend tests, dashboard build, manifest render, and image builds |
 
 ---
 
@@ -57,6 +58,7 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full breakdown of services, d
 
 ```
 financial-ai-platform/
+├── web/                       # React/TypeScript dashboard served by nginx
 ├── services/
 │   ├── gateway/              # API gateway / BFF, auth, routing
 │   ├── transactions/         # Transaction ingestion + AI categorization
@@ -103,8 +105,9 @@ docker compose up --build
 docker compose exec transactions alembic upgrade head
 docker compose exec transactions python -m scripts.seed
 
-# 5. Confirm it's alive
+# 5. Confirm it's alive and open the dashboard
 curl http://localhost:8000/health
+# http://localhost:3000
 ```
 
 ### Without Docker
@@ -248,6 +251,22 @@ deterministic rules engine — that mode is a first-class citizen, not a broken 
 
 Interactive API docs (Swagger UI) will be available at `http://localhost:8000/docs` once the gateway is up.
 
+## React dashboard
+
+The dashboard at `http://localhost:3000` is a real client of the Gateway, not a static mockup.
+After signing in with the seeded demo user, it derives cash-flow totals from recent transactions,
+renders the monthly spending summary and category breakdown, surfaces anomaly notifications, and
+sends grounded questions to the read-only financial assistant. nginx keeps browser traffic
+same-origin and proxies `/api/*` to the Gateway.
+
+For frontend-only development:
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
 ---
 
 ## Implementation Highlights
@@ -281,8 +300,9 @@ Interactive API docs (Swagger UI) will be available at `http://localhost:8000/do
 | 4 — Kafka event bus, Notifications + Insights | ✅ Complete |
 | 5 — Assistant service (conversational Q&A) | ✅ Complete |
 | 6 — Gateway, auth, rate limiting, observability | ✅ Complete |
-| 7 — Kubernetes manifests and local `kind` deploy | ⏭️ Next |
-| 8–9 | Planned — see `BUILD_PLAN.md` |
+| 7 — Kubernetes manifests and local `kind` deploy | 🟡 Manifests implemented; live `kind` verification pending |
+| 8 — CI/CD and cloud deployment | 🟡 CI implemented; AWS deployment planned |
+| 9 — Portfolio polish | 🟡 React dashboard implemented; media/live demo planned |
 
 ## License
 

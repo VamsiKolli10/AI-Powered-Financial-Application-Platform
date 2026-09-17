@@ -1,0 +1,193 @@
+apiVersion: v1
+kind: Service
+metadata: { name: gateway }
+spec:
+  selector: { app: gateway }
+  ports: [{ name: http, port: 8000, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: gateway
+          image: financial-ai-platform/backend:local
+          imagePullPolicy: IfNotPresent
+          env: [{ name: SERVICE, value: gateway }, { name: SERVICE_NAME, value: gateway }]
+          envFrom:
+            - { configMapRef: { name: platform-config } }
+            - { secretRef: { name: platform-secrets } }
+          ports: [{ name: http, containerPort: 8000 }]
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          resources:
+            requests: { cpu: 75m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: transactions }
+spec: { selector: { app: transactions }, ports: [{ name: http, port: 8000, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: transactions }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: transactions } }
+  template:
+    metadata: { labels: { app: transactions } }
+    spec:
+      containers:
+        - name: transactions
+          image: financial-ai-platform/backend:local
+          imagePullPolicy: IfNotPresent
+          env: [{ name: SERVICE, value: transactions }, { name: SERVICE_NAME, value: transactions }]
+          envFrom:
+            - { configMapRef: { name: platform-config } }
+            - { secretRef: { name: platform-secrets } }
+          ports: [{ name: http, containerPort: 8000 }]
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          resources:
+            requests: { cpu: 75m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: assistant }
+spec: { selector: { app: assistant }, ports: [{ name: http, port: 8000, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: assistant }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: assistant } }
+  template:
+    metadata: { labels: { app: assistant } }
+    spec:
+      containers:
+        - name: assistant
+          image: financial-ai-platform/backend:local
+          imagePullPolicy: IfNotPresent
+          env: [{ name: SERVICE, value: assistant }, { name: SERVICE_NAME, value: assistant }]
+          envFrom:
+            - { configMapRef: { name: platform-config } }
+            - { secretRef: { name: platform-secrets } }
+          ports: [{ name: http, containerPort: 8000 }]
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          resources:
+            requests: { cpu: 75m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: insights }
+spec: { selector: { app: insights }, ports: [{ name: http, port: 8000, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: insights }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: insights } }
+  template:
+    metadata: { labels: { app: insights } }
+    spec:
+      containers:
+        - name: insights
+          image: financial-ai-platform/backend:local
+          imagePullPolicy: IfNotPresent
+          env: [{ name: SERVICE, value: insights }, { name: SERVICE_NAME, value: insights }]
+          envFrom:
+            - { configMapRef: { name: platform-config } }
+            - { secretRef: { name: platform-secrets } }
+          ports: [{ name: http, containerPort: 8000 }]
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          resources:
+            requests: { cpu: 75m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notifications }
+spec: { selector: { app: notifications }, ports: [{ name: http, port: 8000, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: notifications }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notifications } }
+  template:
+    metadata: { labels: { app: notifications } }
+    spec:
+      containers:
+        - name: notifications
+          image: financial-ai-platform/backend:local
+          imagePullPolicy: IfNotPresent
+          env: [{ name: SERVICE, value: notifications }, { name: SERVICE_NAME, value: notifications }]
+          envFrom:
+            - { configMapRef: { name: platform-config } }
+            - { secretRef: { name: platform-secrets } }
+          ports: [{ name: http, containerPort: 8000 }]
+          livenessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          resources:
+            requests: { cpu: 75m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: dashboard }
+spec: { selector: { app: dashboard }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: dashboard }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: dashboard } }
+  template:
+    metadata: { labels: { app: dashboard } }
+    spec:
+      containers:
+        - name: dashboard
+          image: financial-ai-platform/dashboard:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 80 }]
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: gateway }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: gateway }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: transactions }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: transactions }
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

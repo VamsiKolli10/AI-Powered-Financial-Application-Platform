@@ -13,6 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render Kubernetes manifests
+        run: kubectl kustomize infra/k8s > /dev/null
+
   dashboard:
     runs-on: ubuntu-latest
     defaults:
@@ -85,7 +92,7 @@ jobs:
         run: python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
 
   build-images:
-    needs: [dashboard, lint, test]
+    needs: [dashboard, lint, manifests, test]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     strategy:

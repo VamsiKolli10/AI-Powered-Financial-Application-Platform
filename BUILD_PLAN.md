@@ -147,17 +147,21 @@ returns 401. Smoke load: 300 requests at concurrency 25 against a 100/min limit 
 
 ---
 
-## Phase 7 — Containerization & Kubernetes (Est. 3–5 days)  :arrow_left: **next**
+## Phase 7 — Containerization & Kubernetes (Est. 3–5 days)  :arrow_left: **in progress**
 
 **Goal:** everything runs on K8s, not just docker-compose.
 
-- [ ] Dockerfile per service (multi-stage builds, slim images)
-- [ ] K8s manifests: Deployments, Services, ConfigMaps, Secrets, HPA
+- [x] Shared multi-stage backend image plus a multi-stage dashboard image
+- [x] K8s manifests: Deployments, Services, ConfigMaps, local Secrets, probes, resources, HPA
 - [ ] Local K8s testing via `kind` or `minikube`
-- [ ] Ingress + basic TLS setup
+- [x] Ingress route; production TLS is documented as an overlay concern
 - [ ] Helm chart (optional but strong portfolio signal) to templatize manifests across environments
 
 **Done when:** `kubectl apply -f infra/k8s/` brings up the full platform locally in `kind`, with health checks passing and HPA configured.
+
+**Status: in progress.** `kubectl kustomize infra/k8s` renders the full local stack and CI now
+gates that render. A live `kind` rollout is still required before this phase is marked complete;
+the manifests deliberately do not imply that EKS or AWS infrastructure exists.
 
 ---
 
