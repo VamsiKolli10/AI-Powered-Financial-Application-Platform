@@ -37,4 +37,8 @@ def build_publisher(settings: Settings, *, client_id: str = "service") -> EventP
     """Publisher chosen by configuration: real broker, or a logging no-op."""
     if not settings.kafka_enabled:
         return NullEventPublisher()
-    return KafkaEventPublisher(settings.kafka_bootstrap_servers, client_id=client_id)
+    return KafkaEventPublisher(
+        settings.kafka_bootstrap_servers,
+        client_id=client_id,
+        client_options=settings.kafka_client_options,
+    )

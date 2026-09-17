@@ -12,6 +12,7 @@ the system of record, not the event log.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 from libs.common.logging import get_logger
@@ -64,9 +65,16 @@ class InMemoryEventPublisher:
 
 
 class KafkaEventPublisher:
-    def __init__(self, bootstrap_servers: str, *, client_id: str = "transactions") -> None:
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        *,
+        client_id: str = "transactions",
+        client_options: Mapping[str, Any] | None = None,
+    ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.client_id = client_id
+        self.client_options = dict(client_options or {})
         self._producer: Any | None = None
 
     async def start(self) -> None:
@@ -79,6 +87,7 @@ class KafkaEventPublisher:
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             enable_idempotence=True,
             acks="all",
+            **self.client_options,
         )
         await self._producer.start()
         log.info("kafka_producer_started", bootstrap_servers=self.bootstrap_servers)

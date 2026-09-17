@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_consumer_group: str = "finai"
     kafka_enabled: bool = True
+    kafka_security_protocol: Literal["PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"] = "PLAINTEXT"
+    kafka_sasl_mechanism: Literal["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"] = "SCRAM-SHA-512"
+    kafka_sasl_username: str = ""
+    kafka_sasl_password: str = ""
 
     # LLM
     openai_api_key: str = ""
@@ -64,6 +68,20 @@ class Settings(BaseSettings):
     def is_local(self) -> bool:
         return self.environment in ("local", "test")
 
+    @property
+    def kafka_client_options(self) -> dict[str, str]:
+        """aiokafka connection options shared by producers and consumers."""
+        options: dict[str, str] = {"security_protocol": self.kafka_security_protocol}
+        if self.kafka_security_protocol.startswith("SASL_"):
+            options.update(
+                {
+                    "sasl_mechanism": self.kafka_sasl_mechanism,
+                    "sasl_plain_username": self.kafka_sasl_username,
+                    "sasl_plain_password": self.kafka_sasl_password,
+                }
+            )
+        return options
+
     @model_validator(mode="after")
     def _reject_dev_secrets_outside_local(self) -> "Settings":
         """Fail fast rather than deploy with the development defaults."""
@@ -76,6 +94,14 @@ class Settings(BaseSettings):
                 raise ValueError("INTERNAL_SERVICE_TOKEN must be set outside local.")
             if self.llm_enabled and not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY is required when LLM_ENABLED is true.")
+            if (
+                self.kafka_enabled
+                and self.kafka_security_protocol.startswith("SASL_")
+                and (not self.kafka_sasl_username or not self.kafka_sasl_password)
+            ):
+                raise ValueError(
+                    "Kafka SASL credentials are required when a SASL protocol is enabled."
+                )
         return self
 
 

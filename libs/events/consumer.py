@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from libs.common.logging import get_logger
@@ -29,11 +29,13 @@ class KafkaEventConsumer:
         group_id: str,
         handler: EventHandler,
         topics: tuple[str, ...] = (Topics.TRANSACTIONS,),
+        client_options: Mapping[str, Any] | None = None,
     ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.group_id = group_id
         self.handler = handler
         self.topics = topics
+        self.client_options = dict(client_options or {})
         self._consumer: Any | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -46,6 +48,7 @@ class KafkaEventConsumer:
             group_id=self.group_id,
             enable_auto_commit=False,
             auto_offset_reset="earliest",
+            **self.client_options,
         )
         await self._consumer.start()
         self._task = asyncio.create_task(self._run(), name=f"consumer-{self.group_id}")
