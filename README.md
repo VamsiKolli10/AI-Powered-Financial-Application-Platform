@@ -300,7 +300,7 @@ npm run dev
 | 4 — Kafka event bus, Notifications + Insights | ✅ Complete |
 | 5 — Assistant service (conversational Q&A) | ✅ Complete |
 | 6 — Gateway, auth, rate limiting, observability | ✅ Complete |
-| 7 — Kubernetes manifests and local `kind` deploy | 🟡 Manifests implemented; live `kind` verification pending |
+| 7 — Kubernetes manifests and local `kind` deploy | ✅ Complete |
 | 8 — CI/CD and cloud deployment | 🟡 CI implemented; AWS deployment planned |
 | 9 — Portfolio polish | 🟡 React dashboard implemented; media/live demo planned |
 

@@ -10,7 +10,7 @@ resources:
 configMapGenerator:
   - name: platform-config
     literals:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=local
       - LOG_LEVEL=INFO
       - REDIS_URL=redis://redis:6379/0
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092

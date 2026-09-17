@@ -25,12 +25,17 @@ kubectl -n financial-ai rollout status deployment/dashboard --timeout=180s
 kubectl -n financial-ai port-forward service/dashboard 3000:80
 ```
 
-Open <http://localhost:3000>. Seed the database from the completed migration pod if you want
+Open <http://localhost:3000>. Seed the database from the transactions deployment if you want
 the included `demo@example.com` / `demo-password` login:
 
 ```bash
-kubectl -n financial-ai exec job/database-migrations -- python -m scripts.seed
+kubectl -n financial-ai exec deployment/transactions -- python -m scripts.seed
 ```
+
+This base was verified with `kind` v0.33.0 and Kubernetes v1.37.0. The migration job completed,
+all deployments became available, and the dashboard's same-origin proxy successfully served
+authenticated transactions, insights, and notifications requests. `LLM_ENABLED=false` keeps
+that local validation deterministic and prevents provider data egress.
 
 For ingress, install the ingress-nginx controller for `kind`, map `ledger-ai.local` to localhost,
 and open `http://ledger-ai.local`. The checked-in Ingress documents the route but port-forwarding
