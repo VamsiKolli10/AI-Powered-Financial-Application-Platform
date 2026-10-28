@@ -1,9 +1,10 @@
 """Central configuration, loaded from environment (see .env.example)."""
 
+import ssl
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
     llm_rate_limit_per_minute: int = 120
     llm_enabled: bool = True
 
+    # Durable queue claims outlive a bounded provider/publisher attempt.
+    worker_lease_seconds: float = Field(default=120, ge=10, le=3600)
+    worker_poll_seconds: float = Field(default=0.5, ge=0.05, le=60)
+
     # Auth
     jwt_secret: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
@@ -69,9 +74,20 @@ class Settings(BaseSettings):
         return self.environment in ("local", "test")
 
     @property
-    def kafka_client_options(self) -> dict[str, str]:
+    def has_llm_credentials(self) -> bool:
+        key = self.openai_api_key.strip()
+        return bool(key) and key.lower() not in {
+            "sk-replace-me",
+            "your-api-key",
+            "your-openai-api-key",
+        }
+
+    @property
+    def kafka_client_options(self) -> dict[str, Any]:
         """aiokafka connection options shared by producers and consumers."""
-        options: dict[str, str] = {"security_protocol": self.kafka_security_protocol}
+        options: dict[str, Any] = {"security_protocol": self.kafka_security_protocol}
+        if self.kafka_security_protocol in ("SSL", "SASL_SSL"):
+            options["ssl_context"] = ssl.create_default_context()
         if self.kafka_security_protocol.startswith("SASL_"):
             options.update(
                 {
@@ -92,7 +108,7 @@ class Settings(BaseSettings):
                 )
             if self.internal_service_token in ("", "dev-internal-token"):
                 raise ValueError("INTERNAL_SERVICE_TOKEN must be set outside local.")
-            if self.llm_enabled and not self.openai_api_key:
+            if self.llm_enabled and not self.has_llm_credentials:
                 raise ValueError("OPENAI_API_KEY is required when LLM_ENABLED is true.")
             if (
                 self.kafka_enabled

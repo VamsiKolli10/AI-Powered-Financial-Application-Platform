@@ -2,68 +2,63 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.common.auth import current_user_id
-from libs.common.logging import get_logger
+from libs.db.categories import CATEGORY_NAMES
 from libs.db.models import TransactionStatus
 from libs.db.repositories import AccountRepository, TransactionRepository
-from libs.db.session import get_session, session_scope
-from libs.events.publisher import EventPublisher
-from libs.events.schemas import BaseEvent
+from libs.db.session import get_session
 from services.transactions import service
+from services.transactions.imports import parse_csv
 from services.transactions.schemas import (
+    AccountRead,
+    CSVImport,
+    ImportResult,
     TransactionAccepted,
     TransactionCreate,
     TransactionPage,
     TransactionPatch,
     TransactionRead,
 )
-from services.transactions.service import Classifier
 
-log = get_logger("transactions")
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
-SessionScope = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+@router.get("/accounts", response_model=list[AccountRead])
+async def list_accounts(
+    session: AsyncSession = Depends(get_session), user_id: str = Depends(current_user_id)
+) -> list[AccountRead]:
+    return [
+        AccountRead.model_validate(a)
+        for a in await AccountRepository(session).list_for_user(user_id)
+    ]
 
 
-async def _categorize_in_background(
-    transaction_id: str,
-    scope_factory: SessionScope = session_scope,
-    classifier: Classifier | None = None,
-    publisher: EventPublisher | None = None,
-    anomaly_threshold: float = 0.8,
-) -> None:
-    """Categorize, commit, then publish.
+@router.get("/categories", response_model=dict[str, str])
+async def list_categories(_user_id: str = Depends(current_user_id)) -> dict[str, str]:
+    return CATEGORY_NAMES
 
-    The session factory, classifier and publisher all come from app state so tests
-    (and future standalone workers) can supply their own without touching the
-    process-wide engine.
-    """
-    events: list[BaseEvent] = []
-    try:
-        async with scope_factory() as session:
-            transaction = await service.categorize_transaction(
-                session, transaction_id, classifier=classifier
-            )
-            if transaction is not None:
-                events = await service.build_categorization_events(
-                    session, transaction, anomaly_threshold=anomaly_threshold
-                )
-    except Exception as exc:  # noqa: BLE001 - background work must not crash the worker
-        log.error("background_categorization_error", transaction_id=transaction_id, error=str(exc))
-        return
 
-    # Published only once the session above has committed, so no event can describe a
-    # row that was rolled back.
-    if publisher is not None:
-        for event in events:
-            await publisher.publish(event)
+@router.post("/import", response_model=ImportResult, status_code=202)
+async def import_transactions(
+    payload: CSVImport,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(current_user_id),
+) -> ImportResult:
+    account = await service.load_owned_account(session, payload.account_id, user_id)
+    rows = parse_csv(payload.csv_text, account_id=account.id, currency=account.currency)
+    created = 0
+    ids = []
+    for row in rows:
+        result = await service.ingest_transaction(session, payload=row, user_id=user_id)
+        created += int(result.created)
+        ids.append(result.transaction.id)
+    await session.commit()
+    return ImportResult(created=created, skipped=len(rows) - created, transaction_ids=ids)
 
 
 @router.post(
@@ -74,27 +69,15 @@ async def _categorize_in_background(
 )
 async def create_transaction(
     payload: TransactionCreate,
-    request: Request,
-    background: BackgroundTasks,
     response: Response,
     session: AsyncSession = Depends(get_session),
     user_id: str = Depends(current_user_id),
 ) -> TransactionAccepted:
     result = await service.ingest_transaction(session, payload=payload, user_id=user_id)
-    # Commit before scheduling: background tasks run before the request session's
-    # teardown commit, so an uncommitted row would be invisible to the categorizer.
+    # The row, balance, audit entry and durable job are one commit. No provider or
+    # Kafka call is made on the request path.
     await session.commit()
-    if result.created:
-        state = request.app.state
-        background.add_task(
-            _categorize_in_background,
-            result.transaction.id,
-            getattr(state, "session_scope", session_scope),
-            getattr(state, "classifier", None),
-            getattr(state, "publisher", None),
-            getattr(state.settings, "anomaly_alert_threshold", 0.8),
-        )
-    else:
+    if not result.created:
         # Idempotent replay: the row already exists, so this is not a new acceptance.
         response.status_code = status.HTTP_200_OK
     return TransactionAccepted.model_validate(result.transaction)

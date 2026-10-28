@@ -1,6 +1,7 @@
-"""Seed the database with the canonical categories and a demo user's transaction history.
+"""Create the local starter workspace; generated transactions are opt-in.
 
-    python -m scripts.seed --months 6 --transactions 400
+    python -m scripts.seed
+    python -m scripts.seed --demo-transactions --months 6 --transactions 400
 
 Idempotent: re-running upserts categories and skips the demo user if it already exists.
 """
@@ -10,16 +11,25 @@ from __future__ import annotations
 import argparse
 import asyncio
 import random
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
+from libs.common.config import get_settings
 from libs.common.logging import configure_logging, get_logger
 from libs.common.security import hash_password
 from libs.common.text import guess_merchant, normalize_description
 from libs.db.categories import CATEGORIES
-from libs.db.models import Category, CategorySource, Transaction, TransactionStatus
+from libs.db.models import (
+    Account,
+    Category,
+    CategorySource,
+    Notification,
+    Transaction,
+    TransactionStatus,
+)
 from libs.db.repositories import AccountRepository, UserRepository
 from libs.db.session import dispose_engine, session_scope
 from services.transactions import categorizer
@@ -70,26 +80,129 @@ async def _ensure_categories() -> None:
         log.info("categories_seeded", total=len(CATEGORIES))
 
 
+async def _ensure_workspace() -> None:
+    """Create usable local credentials without inventing financial activity."""
+    async with session_scope() as session:
+        users = UserRepository(session)
+        user = await users.get_by_email(DEMO_EMAIL)
+        if user is None:
+            user = await users.create(
+                email=DEMO_EMAIL,
+                hashed_password=hash_password(DEMO_PASSWORD),
+                full_name="Local User",
+            )
+        elif user.full_name == "Demo User":
+            user.full_name = "Local User"
+        accounts = (
+            (await session.execute(select(Account).where(Account.user_id == user.id)))
+            .scalars()
+            .all()
+        )
+        if not accounts:
+            await AccountRepository(session).create(user_id=user.id, name="Checking")
+        log.info("local_workspace_ready", user_id=user.id, email=DEMO_EMAIL)
+
+
+async def _clear_demo_transactions() -> int:
+    """Remove only this script's generated rows, preserving actual ledger activity."""
+    if not get_settings().is_local:
+        raise ValueError("Demo cleanup is available only in local/test environments.")
+    async with session_scope() as session:
+        user = await UserRepository(session).get_by_email(DEMO_EMAIL)
+        if user is None:
+            return 0
+        accounts = (
+            (
+                await session.execute(
+                    select(Account).where(Account.user_id == user.id).with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        rows = (
+            (
+                await session.execute(
+                    select(Transaction).where(Transaction.account_id.in_([a.id for a in accounts]))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        generated = [
+            row
+            for row in rows
+            if re.fullmatch(r"seed_\d+_(?:\d+|payroll_\d+|outlier)", row.external_tx_id)
+        ]
+        if not generated:
+            return 0
+        deltas = {account.id: Decimal("0") for account in accounts}
+        for row in generated:
+            deltas[row.account_id] += row.amount
+        ids = [row.id for row in generated]
+        await session.execute(delete(Notification).where(Notification.transaction_id.in_(ids)))
+        await session.execute(delete(Transaction).where(Transaction.id.in_(ids)))
+        generated_ids = set(ids)
+        retained_accounts = {row.account_id for row in rows if row.id not in generated_ids}
+        for account in accounts:
+            account.balance -= deltas[account.id]
+            if (
+                account.id not in retained_accounts
+                and account.balance == 0
+                and account.institution == "First Demo Bank"
+            ):
+                if account.name == "Rewards Credit Card":
+                    await session.delete(account)
+                elif account.name == "Everyday Checking":
+                    account.name, account.institution = "Checking", None
+        log.info("generated_demo_transactions_removed", user_id=user.id, count=len(ids))
+        return len(ids)
+
+
 async def _seed_demo_data(months: int, count: int, seed: int) -> None:
     rng = random.Random(seed)
     async with session_scope() as session:
         users = UserRepository(session)
         user = await users.get_by_email(DEMO_EMAIL)
         if user is not None:
-            log.info("demo_user_exists", user_id=user.id, email=DEMO_EMAIL)
-            return
+            accounts = (
+                (await session.execute(select(Account).where(Account.user_id == user.id)))
+                .scalars()
+                .all()
+            )
+            existing = (
+                await session.execute(
+                    select(Transaction.id)
+                    .where(Transaction.account_id.in_([a.id for a in accounts]))
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                log.info("demo_ledger_exists", user_id=user.id)
+                return
 
-        user = await users.create(
-            email=DEMO_EMAIL,
-            hashed_password=hash_password(DEMO_PASSWORD),
-            full_name="Demo User",
+        else:
+            user = await users.create(
+                email=DEMO_EMAIL,
+                hashed_password=hash_password(DEMO_PASSWORD),
+                full_name="Demo User",
+            )
+            accounts = []
+        usd_accounts = [account for account in accounts if account.currency == "USD"]
+        repository = AccountRepository(session)
+        checking = (
+            usd_accounts[0]
+            if usd_accounts
+            else await repository.create(
+                user_id=user.id, name="Everyday Checking", institution="First Demo Bank"
+            )
         )
-        accounts = AccountRepository(session)
-        checking = await accounts.create(
-            user_id=user.id, name="Everyday Checking", institution="First Demo Bank"
-        )
-        credit = await accounts.create(
-            user_id=user.id, name="Rewards Credit Card", institution="First Demo Bank"
+        credit = (
+            usd_accounts[1]
+            if len(usd_accounts) > 1
+            else await repository.create(
+                user_id=user.id, name="Rewards Credit Card", institution="First Demo Bank"
+            )
         )
 
         population = [m for m in MERCHANTS for _ in range(m[3])]
@@ -171,21 +284,29 @@ async def _seed_demo_data(months: int, count: int, seed: int) -> None:
         )
         balance_delta[credit.id] += Decimal("-4820.00")
 
-        checking.balance = balance_delta[checking.id]
-        credit.balance = balance_delta[credit.id]
+        checking.balance += balance_delta[checking.id]
+        credit.balance += balance_delta[credit.id]
 
         log.info(
             "demo_data_seeded",
             user_id=user.id,
             email=DEMO_EMAIL,
-            password=DEMO_PASSWORD,
             accounts=[checking.id, credit.id],
             transactions=count + len(payroll_dates) + 1,
         )
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed demo data")
+    parser = argparse.ArgumentParser(description="Initialize the local workspace")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--demo-transactions", action="store_true", help="Opt in to generated sample transactions"
+    )
+    mode.add_argument(
+        "--clear-demo-transactions",
+        action="store_true",
+        help="Remove generated demo rows while preserving other data",
+    )
     parser.add_argument("--months", type=int, default=6)
     parser.add_argument("--transactions", type=int, default=400)
     parser.add_argument("--seed", type=int, default=42)
@@ -193,7 +314,12 @@ async def main() -> None:
 
     configure_logging("seed")
     await _ensure_categories()
-    await _seed_demo_data(args.months, args.transactions, args.seed)
+    if args.clear_demo_transactions:
+        await _clear_demo_transactions()
+    if args.demo_transactions:
+        await _seed_demo_data(args.months, args.transactions, args.seed)
+    else:
+        await _ensure_workspace()
     await dispose_engine()
 
 

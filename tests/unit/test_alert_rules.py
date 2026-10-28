@@ -82,6 +82,18 @@ def test_budget_alert_dedupes_per_category_per_month_not_per_transaction():
     assert a.dedupe_key == b.dedupe_key
 
 
+def test_budget_alert_keys_are_scoped_to_user_and_currency():
+    keys = {
+        evaluate(
+            _categorized(-60, user_id=user, currency=currency),
+            thresholds=THRESHOLDS,
+            category_spend_this_month=Decimal("1600"),
+        )[0].dedupe_key
+        for user, currency in [("usr_1", "USD"), ("usr_2", "USD"), ("usr_1", "EUR")]
+    }
+    assert len(keys) == 3
+
+
 def test_one_transaction_can_raise_two_alerts():
     alerts = evaluate(
         _categorized(-900), thresholds=THRESHOLDS, category_spend_this_month=Decimal("2000")

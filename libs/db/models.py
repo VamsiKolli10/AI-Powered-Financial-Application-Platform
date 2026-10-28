@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -157,6 +158,8 @@ class Notification(Base, TimestampMixin):
     message: Mapped[str] = mapped_column(String(500), nullable=False)
     dedupe_key: Mapped[str] = mapped_column(String(160), nullable=False)
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # NULL means channel delivery remains pending, independently of read status.
+    delivered_at: Mapped[datetime | None] = mapped_column(_ts)
 
 
 class AuditLog(Base):
@@ -172,3 +175,61 @@ class AuditLog(Base):
     entity_id: Mapped[str] = mapped_column(String(40), nullable=False)
     payload: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(_ts, server_default=func.now(), nullable=False)
+
+
+class DurableWorkMixin:
+    """A short database claim; external work happens after its transaction commits."""
+
+    attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        _ts, default=lambda: datetime.now(UTC), nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(_ts)
+    lock_token: Mapped[str | None] = mapped_column(String(40))
+    last_error: Mapped[str | None] = mapped_column(String(80))
+    completed_at: Mapped[datetime | None] = mapped_column(_ts)
+    created_at: Mapped[datetime] = mapped_column(
+        _ts, default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
+class CategorizationJob(Base, DurableWorkMixin):
+    __tablename__ = "categorization_jobs"
+    __table_args__ = (
+        Index(
+            "ix_categorization_jobs_pending",
+            "available_at",
+            "created_at",
+            postgresql_where=text("completed_at IS NULL"),
+            sqlite_where=text("completed_at IS NULL"),
+        ),
+    )
+
+    # Exactly one initial enrichment job for each transaction.
+    id: Mapped[str] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class OutboxEvent(Base, DurableWorkMixin):
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        UniqueConstraint("transaction_id", "event_type", name="uq_outbox_transaction_type"),
+        Index("ix_outbox_transaction", "transaction_id"),
+        Index("ix_outbox_partition", "partition_key", "created_at", "id"),
+        Index(
+            "ix_outbox_pending",
+            "available_at",
+            "created_at",
+            postgresql_where=text("completed_at IS NULL"),
+            sqlite_where=text("completed_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    transaction_id: Mapped[str] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    partition_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)

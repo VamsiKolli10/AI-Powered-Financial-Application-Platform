@@ -78,7 +78,8 @@ async def test_categorization_is_idempotent(session):
     first = await service.categorize_transaction(session, result.transaction.id)
     stamp = first.categorized_at
     second = await service.categorize_transaction(session, result.transaction.id)
-    assert second.categorized_at == stamp
+    # SQLite reloads timezone-aware columns as naive UTC; compare the instant.
+    assert second.categorized_at.replace(tzinfo=None) == stamp.replace(tzinfo=None)
 
 
 async def test_categorization_falls_back_when_classifier_fails(session):

@@ -27,11 +27,12 @@ if [[ "${SKIP_BUILD}" != "true" ]]; then
   aws ecr get-login-password --region "${AWS_REGION}" |
     docker login --username AWS --password-stdin "${REGISTRY}"
 
-  docker build -f "${ROOT_DIR}/infra/docker/Dockerfile" \
+  # Terraform provisions x86_64 EKS nodes, including when deploying from an ARM host.
+  docker build --platform linux/amd64 -f "${ROOT_DIR}/infra/docker/Dockerfile" \
     -t "${BACKEND_REPOSITORY}:${IMAGE_TAG}" "${ROOT_DIR}"
   docker push "${BACKEND_REPOSITORY}:${IMAGE_TAG}"
 
-  docker build -f "${ROOT_DIR}/web/Dockerfile" \
+  docker build --platform linux/amd64 -f "${ROOT_DIR}/web/Dockerfile" \
     -t "${DASHBOARD_REPOSITORY}:${IMAGE_TAG}" "${ROOT_DIR}/web"
   docker push "${DASHBOARD_REPOSITORY}:${IMAGE_TAG}"
 fi

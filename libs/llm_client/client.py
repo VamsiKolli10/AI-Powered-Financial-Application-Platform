@@ -45,6 +45,13 @@ class OpenAIChatCompleter:
     async def complete(
         self, *, messages: list[dict[str, str]], model: str, timeout: float, max_tokens: int
     ) -> str:
+        extra_body: dict[str, Any] | None = None
+        if self._client.base_url.host == "openrouter.ai":
+            # A provider that ignores JSON mode cannot satisfy this adapter's contract.
+            extra_body = {"provider": {"require_parameters": True}}
+            if model == "openrouter/free":
+                # These short replies need the token budget for visible JSON output.
+                extra_body["reasoning"] = {"enabled": False}
         response = await self._client.chat.completions.create(
             model=model,
             messages=cast("list[ChatCompletionMessageParam]", messages),
@@ -52,6 +59,7 @@ class OpenAIChatCompleter:
             max_tokens=max_tokens,
             timeout=timeout,
             response_format={"type": "json_object"},
+            extra_body=extra_body,
         )
         return response.choices[0].message.content or ""
 

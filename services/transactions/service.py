@@ -22,6 +22,7 @@ from libs.common.text import guess_merchant, normalize_description
 from libs.db.categories import FALLBACK_CATEGORY
 from libs.db.models import (
     Account,
+    CategorizationJob,
     CategorySource,
     Transaction,
     TransactionStatus,
@@ -53,8 +54,10 @@ class IngestResult:
     created: bool  # False when an idempotent replay returned the existing row
 
 
-async def load_owned_account(session: AsyncSession, account_id: str, user_id: str) -> Account:
-    account = await AccountRepository(session).get(account_id)
+async def load_owned_account(
+    session: AsyncSession, account_id: str, user_id: str, *, for_update: bool = False
+) -> Account:
+    account = await AccountRepository(session).get(account_id, for_update=for_update)
     # Same error either way: never reveal whether another user's account exists.
     if account is None or account.user_id != user_id:
         raise NotFoundError(f"Account '{account_id}' was not found.")
@@ -65,7 +68,7 @@ async def ingest_transaction(
     session: AsyncSession, *, payload: TransactionCreate, user_id: str
 ) -> IngestResult:
     """Write the raw transaction durably as `pending_categorization`."""
-    account = await load_owned_account(session, payload.account_id, user_id)
+    account = await load_owned_account(session, payload.account_id, user_id, for_update=True)
     transactions = TransactionRepository(session)
 
     existing = await transactions.get_by_external_id(payload.account_id, payload.external_tx_id)
@@ -90,6 +93,7 @@ async def ingest_transaction(
         occurred_at=payload.occurred_at,
     )
     await transactions.add(transaction)
+    session.add(CategorizationJob(id=transaction.id))
     await AccountRepository(session).adjust_balance(account, payload.amount)
     await AuditRepository(session).record(
         actor=user_id,
@@ -112,7 +116,7 @@ async def categorize_transaction(
     falls back to the deterministic rules engine.
     """
     transactions = TransactionRepository(session)
-    transaction = await transactions.get(transaction_id)
+    transaction = await transactions.get(transaction_id, for_update=True)
     if transaction is None:
         log.warning("categorize_missing_transaction", transaction_id=transaction_id)
         return None
@@ -131,7 +135,7 @@ async def categorize_transaction(
         log.warning(
             "categorization_failed_using_fallback",
             transaction_id=transaction_id,
-            error=str(exc),
+            error_type=type(exc).__name__,
         )
         fallback = categorizer.classify(transaction.normalized_description, transaction.amount)
         transaction.category_slug = fallback.category_slug or FALLBACK_CATEGORY
@@ -171,7 +175,7 @@ async def recategorize_by_user(
 ) -> Transaction:
     """User correction. Also the signal Phase 3 uses to invalidate the LLM cache entry."""
     transactions = TransactionRepository(session)
-    transaction = await transactions.get(transaction_id)
+    transaction = await transactions.get(transaction_id, for_update=True)
     if transaction is None:
         raise NotFoundError(f"Transaction '{transaction_id}' was not found.")
     await load_owned_account(session, transaction.account_id, user_id)
@@ -213,11 +217,9 @@ async def build_categorization_events(
 ) -> list[BaseEvent]:
     """Events describing a categorized transaction.
 
-    Deliberately separate from the write: the caller publishes these *after* the
-    session commits, so no event can ever describe a row that was rolled back. The
-    inverse failure - committed but unpublished, if the broker is down - is the
-    trade-off taken here; a transactional outbox would close it and is the natural
-    next step if delivery ever needs to be guaranteed.
+    The durable worker stores these in the outbox in the same transaction as
+    categorization and job completion. A separate loop publishes committed rows
+    and completes them only after broker acknowledgement.
     """
     account = await AccountRepository(session).get(transaction.account_id)
     if account is None:  # pragma: no cover - FK makes this unreachable

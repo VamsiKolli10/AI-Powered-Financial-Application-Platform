@@ -4,12 +4,14 @@ import asyncio
 import json
 from decimal import Decimal
 
+import httpx
 import pytest
+from openai import AsyncOpenAI
 
 from libs.llm_client.breaker import BreakerState, CircuitBreaker
 from libs.llm_client.cache import ClassificationCache, InMemoryCache
 from libs.llm_client.categorization import LLMCategorizer
-from libs.llm_client.client import LLMClient
+from libs.llm_client.client import LLMClient, OpenAIChatCompleter
 from libs.llm_client.errors import LLMInvalidResponse, LLMRateLimited, LLMUnavailable
 from libs.llm_client.rate_limit import InMemoryRateLimiter
 
@@ -42,6 +44,68 @@ def build(completer, *, cache=None, limiter=None, breaker=None):
         rate_limiter=limiter or InMemoryRateLimiter(per_minute=600),
         breaker=breaker or CircuitBreaker(),
     )
+
+
+@pytest.mark.parametrize(
+    "base_url,model,expected_routing",
+    [
+        (
+            "https://openrouter.ai/api/v1",
+            "openrouter/free",
+            {"provider": {"require_parameters": True}, "reasoning": {"enabled": False}},
+        ),
+        (
+            "https://openrouter.ai/api/v1",
+            "google/gemma-4-26b-a4b-it:free",
+            {"provider": {"require_parameters": True}},
+        ),
+        ("https://api.openai.com/v1", "gpt-4o-mini", {}),
+        ("https://api.groq.com/openai/v1", "qwen/qwen3.8-27b", {}),
+    ],
+)
+async def test_provider_adapter_routes_json_requests_without_leaking_provider_options(
+    base_url, model, expected_routing, monkeypatch
+):
+    def provider(request):
+        assert str(request.url) == base_url + "/chat/completions"
+        assert request.headers["authorization"] == "Bearer test-key"
+        body = json.loads(request.content)
+        assert body["model"] == model
+        assert body["response_format"] == {"type": "json_object"}
+        assert body["max_tokens"] == 300
+        routing = {key: body[key] for key in ("provider", "reasoning") if key in body}
+        assert routing == expected_routing
+        return httpx.Response(
+            200,
+            json={
+                "id": "test-completion",
+                "object": "chat.completion",
+                "created": 0,
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": '{"reply":"Ready"}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(
+        "openai.AsyncOpenAI",
+        lambda **kwargs: AsyncOpenAI(
+            **kwargs, http_client=httpx.AsyncClient(transport=httpx.MockTransport(provider))
+        ),
+    )
+    adapter = OpenAIChatCompleter("test-key", base_url=base_url)
+    try:
+        client = LLMClient(adapter, model=model, max_tokens=300, max_attempts=1)
+        assert await client.complete_json([{"role": "user", "content": "Reply with JSON."}]) == {
+            "reply": "Ready"
+        }
+    finally:
+        await adapter._client.close()
 
 
 class TestLLMClient:

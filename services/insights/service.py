@@ -9,6 +9,7 @@ is the LLM sentence on top, and that is what gets cached.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -18,6 +19,19 @@ from libs.db.categories import CATEGORY_NAMES
 from libs.db.repositories import AccountRepository, TransactionRepository
 from services.insights.periods import period_bounds, previous_bounds
 from services.insights.schemas import CategoryAmount, TrendPoint
+
+
+@dataclass
+class SummaryResult:
+    aggregates: dict
+    rows: list[CategoryAmount]
+    total_spend: Decimal
+    change_pct: float | None
+    currency: str
+    date_from: datetime
+    date_to: datetime
+    # Currencies with spending in the period that the totals above do not include.
+    other_currencies: list[str] = field(default_factory=list)
 
 
 async def _account_ids(session: AsyncSession, user_id: str, account_id: str | None) -> list[str]:
@@ -41,29 +55,50 @@ def _to_rows(totals: list[tuple[str | None, Decimal, int]]) -> list[CategoryAmou
     ]
 
 
+async def resolve_currency(
+    session: AsyncSession, account_ids: list[str], requested: str | None
+) -> str:
+    """The requested currency, or the one most of the selected accounts are held in."""
+    if requested:
+        return requested.upper()
+    return await AccountRepository(session).primary_currency(account_ids)
+
+
 async def build_summary_aggregates(
     session: AsyncSession,
     *,
     user_id: str,
     account_id: str | None,
     period: str,
+    currency: str | None = None,
     reference: datetime | None = None,
-) -> tuple[dict, list[CategoryAmount], Decimal, float | None]:
-    """Aggregates for one period, plus the change against the previous one."""
-    reference = reference or datetime.now(UTC)
+) -> SummaryResult:
+    """Aggregates for one period in one currency, plus the change against the previous one."""
+    reference = (reference or datetime.now(UTC)).astimezone(UTC)
     account_ids = await _account_ids(session, user_id, account_id)
+    report_currency = await resolve_currency(session, account_ids, currency)
     transactions = TransactionRepository(session)
 
     start, end, label = period_bounds(period, reference)
     totals = await transactions.spend_by_category(
-        account_ids=account_ids, date_from=start, date_to=end
+        account_ids=account_ids, date_from=start, date_to=end, currency=report_currency
     )
     rows = _to_rows(totals)
     total_spend = sum((row.amount for row in rows), Decimal("0"))
+    other_currencies = [
+        code
+        for code in await transactions.spend_currencies(
+            account_ids=account_ids, date_from=start, date_to=end
+        )
+        if code != report_currency
+    ]
 
     prev_start, prev_end = previous_bounds(period, start)
     prev_totals = await transactions.spend_by_category(
-        account_ids=account_ids, date_from=prev_start, date_to=prev_end
+        account_ids=account_ids,
+        date_from=prev_start,
+        date_to=prev_end,
+        currency=report_currency,
     )
     prev_total = sum((Decimal(amount) for _slug, amount, _c in prev_totals), Decimal("0"))
     change_pct = (
@@ -72,6 +107,7 @@ async def build_summary_aggregates(
 
     aggregates = {
         "period": label,
+        "currency": report_currency,
         "total_spend": float(total_spend),
         "by_category": [
             {"category": row.category, "amount": float(row.amount)} for row in rows[:8]
@@ -79,7 +115,16 @@ async def build_summary_aggregates(
         "previous_period_total": float(prev_total),
         "change_vs_previous_pct": change_pct,
     }
-    return aggregates, rows, total_spend, change_pct
+    return SummaryResult(
+        aggregates=aggregates,
+        rows=rows,
+        total_spend=total_spend,
+        change_pct=change_pct,
+        currency=report_currency,
+        date_from=start,
+        date_to=end,
+        other_currencies=other_currencies,
+    )
 
 
 async def build_trends(
@@ -89,18 +134,20 @@ async def build_trends(
     account_id: str | None,
     period: str,
     periods: int,
+    currency: str | None = None,
     reference: datetime | None = None,
-) -> list[TrendPoint]:
-    """Structured time series for charting. No LLM involved."""
+) -> tuple[list[TrendPoint], str]:
+    """Structured time series for charting, in one currency. No LLM involved."""
     reference = reference or datetime.now(UTC)
     account_ids = await _account_ids(session, user_id, account_id)
+    report_currency = await resolve_currency(session, account_ids, currency)
     transactions = TransactionRepository(session)
 
     points: list[TrendPoint] = []
     start, end, label = period_bounds(period, reference)
     for _ in range(periods):
         totals = await transactions.spend_by_category(
-            account_ids=account_ids, date_from=start, date_to=end
+            account_ids=account_ids, date_from=start, date_to=end, currency=report_currency
         )
         rows = _to_rows(totals)
         points.append(
@@ -114,4 +161,4 @@ async def build_trends(
         start, _ = previous_bounds(period, start)
         label = f"{start:%Y-W%V}" if period == "weekly" else f"{start:%Y-%m}"
 
-    return list(reversed(points))
+    return list(reversed(points)), report_currency

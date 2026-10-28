@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.common.auth import current_user_id
+from libs.common.config import get_settings
 from libs.common.errors import AppError
 from libs.common.logging import get_logger
 from libs.db.ids import new_id
@@ -15,6 +17,7 @@ from libs.db.session import get_session
 from services.assistant import answers, guardrails, retrieval
 from services.assistant.conversations import ConversationStore, InMemoryConversationStore
 from services.assistant.schemas import (
+    AssistantStatus,
     ChatRequest,
     ChatResponse,
     ConversationResponse,
@@ -41,6 +44,32 @@ def _store(request: Request) -> ConversationStore:
     return store
 
 
+def _status(request: Request) -> AssistantStatus:
+    settings = getattr(request.app.state, "settings", None) or get_settings()
+    if not settings.llm_enabled:
+        return AssistantStatus(
+            mode="disabled",
+            message="Live AI is off. You can still ask about recorded transactions.",
+        )
+    if not settings.has_llm_credentials:
+        return AssistantStatus(
+            mode="unconfigured",
+            message="Live AI needs a configured provider. Ledger answers are still available.",
+        )
+    return AssistantStatus(
+        mode="llm",
+        model=settings.llm_model,
+        message="Live AI is configured to explain your ledger.",
+    )
+
+
+@router.get("/status", response_model=AssistantStatus, summary="Assistant configuration status")
+async def assistant_status(
+    request: Request, _user_id: str = Depends(current_user_id)
+) -> AssistantStatus:
+    return _status(request)
+
+
 @router.post("/chat", response_model=ChatResponse, summary="Ask about your finances")
 async def chat(
     payload: ChatRequest,
@@ -58,17 +87,33 @@ async def chat(
     store = _store(request)
     history = await store.history(conversation_id, user_id)
 
-    context = await retrieval.retrieve(session, user_id=user_id, message=payload.message)
-    draft = answers.build_answer(context)
+    context = await retrieval.retrieve(
+        session,
+        user_id=user_id,
+        message=payload.message,
+        currency=payload.currency,
+        history=history,
+    )
+    draft = answers.build_answer(context, question=payload.message)
     facts = answers.build_facts(context)
 
     responder = getattr(request.app.state, "responder", None)
+    fallback_reason: str | None
     if responder is None:
         reply, reply_source = draft, "draft"
+        fallback_reason = _status(request).mode
     else:
-        reply, reply_source = await responder.respond(
-            question=payload.message, facts=facts, draft=draft, history=history
-        )
+        try:
+            # The Gateway has a 15-second timeout. Bound the entire model attempt,
+            # including limiter access and provider retries, so a useful answer returns.
+            async with asyncio.timeout(min(responder.client.timeout_seconds, 12.0)):
+                reply, reply_source, fallback_reason = await responder.respond(
+                    question=payload.message, facts=facts, draft=draft, history=history
+                )
+        except TimeoutError:
+            log.warning("assistant_provider_deadline_exceeded")
+            reply, reply_source, fallback_reason = draft, "draft", "provider_timeout"
+    reply = answers.with_currency_scope(reply, context)
 
     now = datetime.now(UTC).isoformat()
     await store.append(
@@ -87,6 +132,7 @@ async def chat(
             SourceRef(type=s.type, category=s.category, period=s.period) for s in context.sources
         ],
         reply_source=reply_source,
+        fallback_reason=fallback_reason,
     )
 
 

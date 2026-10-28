@@ -16,6 +16,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from libs.db.ids import new_id
+
 SCHEMA_VERSION = 1
 
 
@@ -29,6 +31,7 @@ class BaseEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     event_type: str
+    event_id: str = Field(default_factory=lambda: new_id("evt"))
     schema_version: int = SCHEMA_VERSION
     published_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

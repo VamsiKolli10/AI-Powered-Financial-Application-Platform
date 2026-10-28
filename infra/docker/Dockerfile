@@ -6,10 +6,11 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /build
 RUN pip install --no-cache-dir uv
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY libs ./libs
 COPY services ./services
-RUN uv pip install --system --no-cache .
+RUN uv export --frozen --no-dev --no-editable --output-file requirements.txt >/dev/null \
+    && uv pip install --system --no-cache -r requirements.txt
 
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime

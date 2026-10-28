@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -12,10 +12,10 @@ from libs.db.models import CategorySource, Transaction, TransactionStatus
 
 
 class TransactionCreate(BaseModel):
-    account_id: str = Field(..., max_length=40)
-    external_tx_id: str = Field(..., max_length=120)
-    amount: Decimal = Field(..., description="Negative for outflow, positive for inflow")
-    currency: str = Field("USD", min_length=3, max_length=3)
+    account_id: str = Field(..., min_length=1, max_length=40)
+    external_tx_id: str = Field(..., min_length=1, max_length=120)
+    amount: Decimal = Field(..., max_digits=18, decimal_places=2)
+    currency: str = Field("USD", pattern=r"^[A-Za-z]{3}$")
     description: str = Field(..., min_length=1, max_length=500)
     occurred_at: datetime
 
@@ -25,6 +25,20 @@ class TransactionCreate(BaseModel):
         if v == 0:
             raise ValueError("amount must not be zero")
         return v.quantize(Decimal("0.01"))
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("description must not be blank")
+        return v.strip()
+
+    @field_validator("occurred_at")
+    @classmethod
+    def _timestamp(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("occurred_at must include a timezone")
+        return v.astimezone(UTC)
 
     @field_validator("currency")
     @classmethod
@@ -98,3 +112,21 @@ class TransactionPage(BaseModel):
     items: list[TransactionRead]
     next_cursor: str | None = None
     limit: int
+
+
+class AccountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    currency: str
+
+
+class CSVImport(BaseModel):
+    account_id: str = Field(min_length=1, max_length=40)
+    csv_text: str = Field(min_length=1, max_length=262144)
+
+
+class ImportResult(BaseModel):
+    created: int
+    skipped: int
+    transaction_ids: list[str]

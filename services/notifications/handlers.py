@@ -13,7 +13,7 @@ from libs.common.logging import get_logger
 from libs.db.repositories import AccountRepository, NotificationRepository, TransactionRepository
 from libs.events.schemas import BaseEvent, TransactionCategorized
 from services.notifications.delivery import AlertChannel
-from services.notifications.rules import AlertThresholds, evaluate
+from services.notifications.rules import Alert, AlertThresholds, evaluate
 
 log = get_logger("notifications")
 
@@ -39,8 +39,9 @@ async def _category_spend_this_month(
         return None
     account_ids = await AccountRepository(session).ids_for_user(account.user_id)
     start, end = _month_bounds(event.occurred_at)
+    # Same currency as the transaction: a budget is crossed in one currency, not a blend.
     totals = await TransactionRepository(session).spend_by_category(
-        account_ids=account_ids, date_from=start, date_to=end
+        account_ids=account_ids, date_from=start, date_to=end, currency=event.currency
     )
     for slug, total, _count in totals:
         if slug == event.category:
@@ -74,11 +75,7 @@ class NotificationHandler:
                 else None
             )
             alerts = evaluate(event, thresholds=self.thresholds, category_spend_this_month=spend)
-            if not alerts:
-                return
-
             repo = NotificationRepository(session)
-            created = []
             for alert in alerts:
                 notification = await repo.create_if_new(
                     user_id=alert.user_id,
@@ -90,9 +87,35 @@ class NotificationHandler:
                 if notification is None:
                     log.info("alert_suppressed_duplicate", dedupe_key=alert.dedupe_key)
                     continue
-                created.append(alert)
+
+            # Include earlier pending deliveries even if ledger corrections mean
+            # the rule no longer fires when this event is replayed.
+            transaction_id = getattr(event, "transaction_id", None)
+            user_id = getattr(event, "user_id", None)
+            pending = (
+                await repo.pending_for_transaction(user_id=user_id, transaction_id=transaction_id)
+                if transaction_id is not None and user_id is not None
+                else []
+            )
+            deliveries = [
+                (
+                    row.id,
+                    Alert(
+                        user_id=row.user_id,
+                        type=row.type,
+                        message=row.message,
+                        transaction_id=row.transaction_id,
+                        dedupe_key=row.dedupe_key,
+                    ),
+                )
+                for row in pending
+            ]
 
         # Deliver only after the rows are committed, so a delivery failure cannot
         # produce an alert the user was told about but that we never stored.
-        for alert in created:
+        for notification_id, alert in deliveries:
             await self.channel.send(alert)
+            async with self.session_scope() as session:
+                notification = await NotificationRepository(session).get(notification_id)
+                if notification is not None:
+                    notification.delivered_at = datetime.now(UTC)

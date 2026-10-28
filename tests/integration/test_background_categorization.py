@@ -34,10 +34,11 @@ async def file_db(tmp_path):
     await engine.dispose()
 
 
-async def test_background_task_sees_the_committed_row(file_db):
+async def test_new_worker_recovers_the_committed_job_after_the_api_returns(file_db):
     from contextlib import asynccontextmanager
 
     from services.transactions.main import app
+    from services.transactions.workers import TransactionWorkers
 
     async def _override():
         async with file_db() as s:
@@ -81,6 +82,9 @@ async def test_background_task_sees_the_committed_row(file_db):
                 },
             )
             assert created.status_code == 202
+            # A fresh worker has no in-process handoff from the request.
+            worker = TransactionWorkers(_scope)
+            assert await worker.categorize_once() is True
             fetched = await client.get(f"/transactions/{created.json()['id']}")
 
         assert fetched.json()["status"] == "categorized"

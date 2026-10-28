@@ -90,6 +90,7 @@ async def stack(sessionmaker_, session, gateway_settings):
         }
     )
     gateway_app.state.rate_limiter = UserRateLimiter(gateway_settings)
+    gateway_app.state.status_cache = None
 
     async with AsyncClient(
         transport=ASGITransport(app=gateway_app), base_url="http://gateway"
@@ -319,25 +320,261 @@ class TestRateLimiting:
         assert standard.status_code == 200  # the cheap tier still has budget
 
 
+@pytest.fixture
+def local_setup(stack, monkeypatch):
+    from scripts import seed
+    from services.gateway.main import app as gateway_app
+
+    monkeypatch.setattr(seed, "session_scope", gateway_app.state.session_scope)
+    return seed
+
+
+@pytest.fixture
+def seed_demo(local_setup):
+
+    async def run():
+        await local_setup._ensure_categories()
+        await local_setup._seed_demo_data(months=1, count=10, seed=42)
+
+    return run
+
+
 class TestSeededDemoUser:
-    async def test_the_seeded_demo_account_can_log_in(self, stack, session):
-        """Regression: the demo user was seeded at a .local address, which email
-        validation rejects, so the credentials printed by the seed script could not
-        actually be used against /auth/login."""
-        from libs.common.security import hash_password
+    async def test_default_workspace_is_empty_and_can_log_in(self, stack, local_setup):
+        await local_setup._ensure_workspace()
+        await local_setup._ensure_workspace()
+        response = await stack.post(
+            "/api/v1/auth/login",
+            json={"email": local_setup.DEMO_EMAIL, "password": local_setup.DEMO_PASSWORD},
+        )
+        assert response.status_code == 200
+        transactions = await stack.get(
+            "/api/v1/transactions", headers=_auth(response.json()["access_token"])
+        )
+        assert transactions.json()["items"] == []
+
+    async def test_cleanup_removes_only_generated_rows_and_reverses_their_balance(
+        self, stack, session, seed_demo, local_setup
+    ):
+        from sqlalchemy import select
+
+        from libs.db.models import (
+            Account,
+            Notification,
+            NotificationType,
+            Transaction,
+            TransactionStatus,
+        )
         from libs.db.repositories import UserRepository
+        from tests.conftest import within_current_month
+
+        await seed_demo()
+        user = await UserRepository(session).get_by_email(local_setup.DEMO_EMAIL)
+        account = (
+            (await session.execute(select(Account).where(Account.user_id == user.id)))
+            .scalars()
+            .first()
+        )
+        real = Transaction(
+            account_id=account.id,
+            external_tx_id="real-bank-transaction",
+            amount=-23,
+            currency="USD",
+            description="Real purchase",
+            normalized_description="real purchase",
+            status=TransactionStatus.PENDING_CATEGORIZATION,
+            occurred_at=within_current_month(),
+        )
+        other = Transaction(
+            account_id="acct_other",
+            external_tx_id="seed_42_outlier",
+            amount=-99,
+            currency="USD",
+            description="Other user's transaction",
+            normalized_description="other",
+            status=TransactionStatus.PENDING_CATEGORIZATION,
+            occurred_at=within_current_month(),
+        )
+        generated = (
+            (await session.execute(select(Transaction).where(Transaction.account_id == account.id)))
+            .scalars()
+            .first()
+        )
+        session.add(
+            Notification(
+                user_id=user.id,
+                transaction_id=generated.id,
+                type=NotificationType.LARGE_TRANSACTION,
+                message="Generated alert",
+                dedupe_key="test-generated-alert",
+            )
+        )
+        session.add_all([real, other])
+        account.balance -= 23
+        await session.commit()
+
+        assert await local_setup._clear_demo_transactions() == 13
+        assert await local_setup._clear_demo_transactions() == 0
+        await session.refresh(account)
+        assert account.balance == -23
+        assert await session.get(Transaction, real.id) is not None
+        assert await session.get(Transaction, other.id) is not None
+        assert (
+            await session.execute(
+                select(Notification).where(Notification.dedupe_key == "test-generated-alert")
+            )
+        ).scalar_one_or_none() is None
+
+    async def test_real_seed_creates_a_usable_demo_login(self, stack, seed_demo):
+        """A healthy gateway cannot authenticate the demo until setup creates it."""
         from scripts.seed import DEMO_EMAIL, DEMO_PASSWORD
 
-        await UserRepository(session).create(
-            email=DEMO_EMAIL,
-            hashed_password=hash_password(DEMO_PASSWORD),
-            full_name="Demo User",
+        missing = await stack.post(
+            "/api/v1/auth/login", json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD}
         )
-        await session.commit()
+        assert missing.status_code == 401
+
+        await seed_demo()
 
         response = await stack.post(
             "/api/v1/auth/login", json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD}
         )
 
         assert response.status_code == 200, response.text
-        assert response.json()["access_token"]
+        headers = _auth(response.json()["access_token"])
+        transactions = await stack.get("/api/v1/transactions?limit=100", headers=headers)
+        assert transactions.status_code == 200
+        assert len(transactions.json()["items"]) == 13  # ten purchases, two payrolls, outlier
+
+    async def test_repeated_seed_preserves_existing_password_and_ledger(
+        self, stack, session, seed_demo
+    ):
+        from sqlalchemy import select
+
+        from libs.common.security import hash_password
+        from libs.db.models import Account, Transaction
+        from libs.db.repositories import UserRepository
+        from scripts.seed import DEMO_EMAIL
+
+        await seed_demo()
+        user = await UserRepository(session).get_by_email(DEMO_EMAIL)
+        changed_password = "changed-demo-password"
+        user.hashed_password = hash_password(changed_password)
+        await session.commit()
+
+        async def ledger():
+            accounts = (
+                await session.execute(
+                    select(Account.id, Account.balance)
+                    .where(Account.user_id == user.id)
+                    .order_by(Account.id)
+                )
+            ).all()
+            transactions = (
+                await session.execute(
+                    select(Transaction.id, Transaction.amount)
+                    .join(Account)
+                    .where(Account.user_id == user.id)
+                    .order_by(Transaction.id)
+                )
+            ).all()
+            return accounts, transactions
+
+        before = await ledger()
+        await seed_demo()
+        assert await ledger() == before
+        response = await stack.post(
+            "/api/v1/auth/login", json={"email": DEMO_EMAIL, "password": changed_password}
+        )
+        assert response.status_code == 200, response.text
+
+
+class TestPlatformStatus:
+    """`/api/v1/status` reports each service's readiness without leaking its details."""
+
+    @staticmethod
+    def _readiness(down: set[str], seen: list[str] | None = None) -> AsyncClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if seen is not None:
+                seen.append(request.url.host)
+            assert request.url.path == "/ready"
+            if request.url.host in down:
+                if request.url.host == "notifications":
+                    raise httpx.ConnectError("connection refused")
+                return httpx.Response(
+                    503,
+                    json={"status": "not_ready", "checks": {"database": "error: db-7.internal"}},
+                )
+            return httpx.Response(200, json={"status": "ready", "checks": {"database": "ok"}})
+
+        return AsyncClient(transport=httpx.MockTransport(handler))
+
+    @staticmethod
+    async def _with_client(client: AsyncClient):
+        from services.gateway.main import app as gateway_app
+
+        original = gateway_app.state.http_client
+        gateway_app.state.http_client = client
+        gateway_app.state.status_cache = None
+        return gateway_app, original
+
+    async def test_all_services_ready(self, stack):
+        token = await _register(stack)
+        gateway_app, original = await self._with_client(self._readiness(set()))
+        try:
+            response = await stack.get("/api/v1/status", headers=_auth(token))
+        finally:
+            gateway_app.state.http_client = original
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["services"] == {
+            "gateway": "ok",
+            "transactions": "ok",
+            "assistant": "ok",
+            "insights": "ok",
+            "notifications": "ok",
+        }
+
+    async def test_unready_or_unreachable_services_are_reported_without_details(self, stack):
+        token = await _register(stack)
+        gateway_app, original = await self._with_client(
+            self._readiness({"insights", "notifications"})
+        )
+        try:
+            response = await stack.get("/api/v1/status", headers=_auth(token))
+        finally:
+            gateway_app.state.http_client = original
+
+        body = response.json()
+        assert body["status"] == "degraded"
+        assert body["services"]["insights"] == "unavailable"  # answered 503
+        assert body["services"]["notifications"] == "unavailable"  # unreachable
+        assert body["services"]["transactions"] == "ok"
+        assert "db-7.internal" not in response.text
+
+    async def test_results_are_cached_briefly(self, stack):
+        token = await _register(stack)
+        seen: list[str] = []
+        gateway_app, original = await self._with_client(self._readiness(set(), seen))
+        try:
+            await stack.get("/api/v1/status", headers=_auth(token))
+            await stack.get("/api/v1/status", headers=_auth(token))
+        finally:
+            gateway_app.state.http_client = original
+
+        assert len(seen) == 4  # one probe per downstream service, not eight
+
+    async def test_status_requires_a_user_token(self, stack):
+        response = await stack.get("/api/v1/status")
+        assert response.status_code == 401
+
+    async def test_status_is_not_mistaken_for_a_service(self, stack):
+        token = await _register(stack)
+        gateway_app, original = await self._with_client(self._readiness(set()))
+        try:
+            response = await stack.get("/api/v1/status", headers=_auth(token))
+        finally:
+            gateway_app.state.http_client = original
+        assert response.json().get("error", {}).get("code") != "NOT_FOUND"

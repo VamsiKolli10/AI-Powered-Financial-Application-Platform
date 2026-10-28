@@ -159,6 +159,14 @@ resource "aws_security_group" "kafka" {
     security_groups = [module.eks.node_security_group_id]
   }
 
+  ingress {
+    description = "MSK internal broker communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

@@ -30,3 +30,6 @@ dist
 **/*.tfvars.json
 **/*.tfplan
 .aws
+**/node_modules
+**/test-results
+**/playwright-report

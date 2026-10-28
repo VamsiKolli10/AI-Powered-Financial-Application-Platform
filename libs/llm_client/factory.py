@@ -29,7 +29,7 @@ def build_categorizer(
     if not settings.llm_enabled:
         log.info("llm_disabled_using_rules_only")
         return None
-    if not settings.openai_api_key:
+    if not settings.has_llm_credentials:
         log.warning("llm_enabled_but_no_api_key_using_rules_only")
         return None
 
@@ -56,7 +56,7 @@ def build_summarizer(
     settings: Settings, *, redis_client: Any | None = None
 ) -> SpendingSummarizer | None:
     """Summarizer for the Insights service, or None to use the deterministic template."""
-    if not settings.llm_enabled or not settings.openai_api_key:
+    if not settings.llm_enabled or not settings.has_llm_credentials:
         log.info("summarizer_disabled_using_template")
         return None
 
@@ -87,7 +87,7 @@ def build_responder(
     settings: Settings, *, redis_client: Any | None = None
 ) -> AssistantResponder | None:
     """Assistant responder, or None to answer with the deterministic draft only."""
-    if not settings.llm_enabled or not settings.openai_api_key:
+    if not settings.llm_enabled or not settings.has_llm_credentials:
         log.info("responder_disabled_using_draft_answers")
         return None
 

@@ -1,0 +1,107 @@
+# Independent, disposable stack. No env_file and no real provider credentials.
+name: finai-e2e
+x-environment: &environment
+  ENVIRONMENT: test
+  LOG_LEVEL: WARNING
+  DATABASE_URL: postgresql+asyncpg://finai:finai@postgres:5432/finai_e2e
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAFKA_ENABLED: "true"
+  LLM_ENABLED: "false"
+  OPENAI_API_KEY: ""
+  JWT_SECRET: isolated-test-jwt-secret-at-least-32-characters
+  INTERNAL_SERVICE_TOKEN: isolated-test-service-token
+  TRANSACTIONS_URL: http://transactions:8000
+  ASSISTANT_URL: http://assistant:8000
+  INSIGHTS_URL: http://insights:8000
+  NOTIFICATIONS_URL: http://notifications:8000
+  WORKER_LEASE_SECONDS: 10
+  WORKER_POLL_SECONDS: 0.1
+  RATE_LIMIT_STANDARD: 5000
+  RATE_LIMIT_LLM: 5000
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: infra/docker/Dockerfile
+  environment: *environment
+  depends_on:
+    database-init: { condition: service_completed_successfully }
+    redis: { condition: service_healthy }
+    kafka: { condition: service_healthy }
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 3s
+    timeout: 3s
+    retries: 30
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: finai
+      POSTGRES_PASSWORD: finai
+      POSTGRES_DB: finai_e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finai -d finai_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: isolated-finai-tests
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    volumes: ["kafkadata:/var/lib/kafka/data"]
+  database-init:
+    <<: *app
+    command: ["sh", "-c", "alembic upgrade head && python -m scripts.seed"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck: { disable: true }
+  gateway:
+    <<: *app
+    environment: { <<: *environment, SERVICE: gateway }
+    ports: ["18000:8000"]
+  transactions:
+    <<: *app
+    environment: { <<: *environment, SERVICE: transactions }
+  assistant:
+    <<: *app
+    environment: { <<: *environment, SERVICE: assistant }
+  insights:
+    <<: *app
+    environment: { <<: *environment, SERVICE: insights }
+  notifications:
+    <<: *app
+    environment: { <<: *environment, SERVICE: notifications }
+  dashboard:
+    build: { context: ../../web, dockerfile: Dockerfile }
+    depends_on: { gateway: { condition: service_healthy } }
+    ports: ["13000:80"]
+volumes:
+  pgdata:
+  kafkadata:

@@ -65,4 +65,12 @@ run "staging_plan" {
     condition     = aws_msk_cluster.platform.encryption_info[0].encryption_in_transit[0].client_broker == "TLS"
     error_message = "MSK clients must use TLS."
   }
+
+  assert {
+    condition = anytrue([
+      for rule in aws_security_group.kafka.ingress :
+      rule.self && rule.protocol == "tcp" && rule.from_port == 0 && rule.to_port == 65535
+    ])
+    error_message = "MSK brokers must be able to communicate within their own security group."
+  }
 }

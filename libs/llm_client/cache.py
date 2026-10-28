@@ -72,6 +72,9 @@ class ClassificationCache:
         except json.JSONDecodeError:
             log.warning("cache_entry_corrupt", key=key)
             return None
+        if not isinstance(payload, dict):
+            log.warning("cache_entry_invalid_shape", key=key)
+            return None
         self.hits += 1
         return payload
 

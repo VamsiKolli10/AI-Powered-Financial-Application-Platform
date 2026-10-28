@@ -13,6 +13,7 @@ from libs.db.session import check_database, dispose_engine, session_scope
 from libs.events import build_publisher
 from libs.llm_client.factory import build_categorizer
 from services.transactions.routes import router
+from services.transactions.workers import TransactionWorkers
 
 settings = get_settings()
 log = get_logger("transactions")
@@ -25,18 +26,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.classifier = build_categorizer(settings, redis_client=redis_client)
     app.state.session_scope = session_scope
     publisher = build_publisher(settings, client_id="transactions")
-    await publisher.start()
     app.state.publisher = publisher
+    workers = TransactionWorkers(
+        session_scope,
+        classifier=app.state.classifier,
+        publisher=publisher if settings.kafka_enabled else None,
+        anomaly_threshold=settings.anomaly_alert_threshold,
+        lease_seconds=settings.worker_lease_seconds,
+        poll_seconds=settings.worker_poll_seconds,
+    )
+    app.state.workers = workers
+    await workers.start()
     log.info(
         "service_ready",
         llm_enabled=settings.llm_enabled,
         classifier="llm" if app.state.classifier else "rules",
         events="kafka" if settings.kafka_enabled else "disabled",
     )
-    yield
-    await publisher.stop()
-    await close_redis()
-    await dispose_engine()
+    try:
+        yield
+    finally:
+        await workers.stop()
+        await close_redis()
+        await dispose_engine()
 
 
 app = create_app(

@@ -5,9 +5,8 @@ Three implementations, one interface:
   * `NullEventPublisher`  - logs and drops, used when KAFKA_ENABLED=false
   * `InMemoryEventPublisher` - records events, used by tests and the local fan-out demo
 
-Publishing must never break the transaction that triggered it: a broker outage is
-logged and swallowed, because the durable write already succeeded and the ledger is
-the system of record, not the event log.
+The outbox worker calls this after the durable write. Publishing errors propagate so
+the event remains pending until Kafka acknowledges it.
 """
 
 from __future__ import annotations
@@ -99,8 +98,7 @@ class KafkaEventPublisher:
 
     async def publish(self, event: BaseEvent, *, topic: str = Topics.TRANSACTIONS) -> None:
         if self._producer is None:
-            log.warning("publish_before_start", event_type=event.event_type)
-            return
+            raise RuntimeError("Kafka producer has not started")
         try:
             await self._producer.send_and_wait(
                 topic,
@@ -113,5 +111,6 @@ class KafkaEventPublisher:
                 "event_publish_failed",
                 topic=topic,
                 event_type=event.event_type,
-                error=str(exc),
+                error_type=type(exc).__name__,
             )
+            raise

@@ -14,6 +14,7 @@ from libs.db.session import check_database, dispose_engine
 from services.gateway.auth_routes import router as auth_router
 from services.gateway.rate_limit import UserRateLimiter
 from services.gateway.routes import router as proxy_router
+from services.gateway.status import router as status_router
 
 settings = get_settings()
 log = get_logger("gateway")
@@ -47,9 +48,12 @@ app = create_app(
 
 api = APIRouter(prefix=API_PREFIX)
 api.include_router(auth_router)
+# Before the proxy: its "/{service}" route would otherwise claim "/status".
+api.include_router(status_router)
 api.include_router(proxy_router)
 app.include_router(api)
 
 # Set on the app so tests can substitute both without touching the lifespan.
 app.state.http_client = None
 app.state.rate_limiter = UserRateLimiter(settings)
+app.state.status_cache = None

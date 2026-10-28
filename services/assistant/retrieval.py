@@ -127,6 +127,9 @@ class RetrievedContext:
     comparison_label: str | None = None
     comparison_total: Decimal | None = None
     sources: list[Source] = field(default_factory=list)
+    # Every amount above is in this currency; other currencies are left out, not summed in.
+    currency: str = "USD"
+    other_currencies: list[str] = field(default_factory=list)
 
     @property
     def has_data(self) -> bool:
@@ -207,19 +210,42 @@ def plan(message: str, *, now: datetime | None = None) -> RetrievalPlan:
     )
 
 
+def _explicit_period(message: str) -> bool:
+    text = message.lower()
+    return bool(
+        re.search(r"\b(?:this|last|previous)\s+(?:\d+\s+)?(?:day|week|month|year)s?\b", text)
+    ) or any(re.search(rf"\b{month}\b", text) for month in MONTHS)
+
+
 async def retrieve(
-    session: AsyncSession, *, user_id: str, message: str, now: datetime | None = None
+    session: AsyncSession,
+    *,
+    user_id: str,
+    message: str,
+    now: datetime | None = None,
+    currency: str | None = None,
+    history: list[dict] | None = None,
 ) -> RetrievedContext:
     """Fetch exactly the figures needed to answer, scoped to this user's accounts."""
     now = now or datetime.now(UTC)
     retrieval = plan(message, now=now)
+    if not _explicit_period(message) and re.match(
+        r"\s*(?:and\b|also\b|what about\b|how about\b)", message, re.IGNORECASE
+    ):
+        for turn in reversed(history or []):
+            previous = str(turn.get("content", ""))
+            if turn.get("role") == "user" and _explicit_period(previous):
+                retrieval.period = parse_period(previous, now=now)
+                break
     period = retrieval.period
 
-    account_ids = await AccountRepository(session).ids_for_user(user_id)
+    accounts = AccountRepository(session)
+    account_ids = await accounts.ids_for_user(user_id)
+    currency = currency.upper() if currency else await accounts.primary_currency(account_ids)
     transactions = TransactionRepository(session)
 
     totals = await transactions.spend_by_category(
-        account_ids=account_ids, date_from=period.start, date_to=period.end
+        account_ids=account_ids, date_from=period.start, date_to=period.end, currency=currency
     )
     by_category = [
         (CATEGORY_NAMES.get(slug or "", "Uncategorized"), amount, count)
@@ -230,6 +256,14 @@ async def retrieve(
         total_spend=sum((amount for _n, amount, _c in by_category), Decimal("0")),
         by_category=by_category,
         sources=[Source(type="aggregate", period=period.label)],
+        currency=currency,
+        other_currencies=[
+            code
+            for code in await transactions.spend_currencies(
+                account_ids=account_ids, date_from=period.start, date_to=period.end
+            )
+            if code != currency
+        ],
     )
 
     if retrieval.category_slug:
@@ -248,6 +282,7 @@ async def retrieve(
             account_ids=account_ids,
             date_from=period.start - span,
             date_to=period.start,
+            currency=currency,
         )
         for slug, amount, _count in prev_totals:
             if slug == retrieval.category_slug:
@@ -255,14 +290,13 @@ async def retrieve(
                 context.comparison_total = amount
 
     if retrieval.wants_largest:
-        rows, _cursor = await transactions.list_page(
+        outflows = await transactions.largest_outflows(
             account_ids=account_ids,
-            limit=100,
             date_from=period.start,
             date_to=period.end,
             category=retrieval.category_slug,
+            currency=currency,
         )
-        outflows = sorted((t for t in rows if t.amount < 0), key=lambda t: t.amount)[:3]
         context.largest = [
             (t.merchant or t.normalized_description, abs(t.amount), t.occurred_at) for t in outflows
         ]

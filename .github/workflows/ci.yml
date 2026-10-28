@@ -13,6 +13,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: cd web && npx playwright install --with-deps chromium
+      - name: Isolated PostgreSQL, Redis, Kafka and browser workflows
+        run: bash scripts/test_application.sh
+
   manifests:
     runs-on: ubuntu-latest
     steps:
@@ -50,6 +65,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - name: Unit and component tests
+        run: npm test
       - run: npm run build
 
   lint:
@@ -109,7 +126,7 @@ jobs:
         run: uv run python -m scripts.eval_categorization --mode rules --min-accuracy 0.90
 
   build-images:
-    needs: [dashboard, lint, manifests, terraform, test]
+    needs: [application, dashboard, lint, manifests, terraform, test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:

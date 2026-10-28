@@ -15,6 +15,7 @@ from libs.events import InMemoryEventPublisher
 from services.notifications.delivery import CollectingChannel
 from services.notifications.handlers import NotificationHandler
 from services.notifications.rules import AlertThresholds
+from tests.conftest import within_current_month
 
 
 @pytest.fixture
@@ -50,7 +51,7 @@ def _payload(**overrides):
         "amount": -6.75,
         "currency": "USD",
         "description": "STARBUCKS #4412 SEATTLE WA",
-        "occurred_at": "2026-09-05T14:30:00Z",
+        "occurred_at": within_current_month().isoformat(),
     }
     return {**base, **overrides}
 

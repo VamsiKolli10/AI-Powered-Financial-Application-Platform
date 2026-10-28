@@ -8,12 +8,15 @@ numbers that are already correct.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from libs.common.logging import get_logger
+from libs.common.money import format_money
 from libs.llm_client.cache import ClassificationCache
 from libs.llm_client.client import LLMClient
 from libs.llm_client.errors import LLMError
+from libs.llm_client.grounding import valid_rewrite
 from libs.llm_client.metrics import LLM_CACHE, LLM_CALLS
 from libs.llm_client.prompts.summarize_v1 import build_summary_messages
 from libs.llm_client.rate_limit import InMemoryRateLimiter, TokenBucketRateLimiter
@@ -21,12 +24,14 @@ from libs.llm_client.rate_limit import InMemoryRateLimiter, TokenBucketRateLimit
 log = get_logger("llm_client.summarize")
 
 
-def fallback_summary(period: str, total: float, top: list[tuple[str, float]]) -> str:
+def fallback_summary(
+    period: str, total: float, top: list[tuple[str, float]], *, currency: str = "USD"
+) -> str:
     """Deterministic summary used when the LLM is unavailable or disabled."""
     if not top:
         return f"No spending recorded for {period}."
-    leaders = ", ".join(f"{name} ({amount:,.0f})" for name, amount in top[:3])
-    return f"Total spending for {period} was {total:,.2f}, led by {leaders}."
+    leaders = ", ".join(f"{name} ({format_money(amount, currency)})" for name, amount in top[:3])
+    return f"Total spending for {period} was {format_money(total, currency)}, led by {leaders}."
 
 
 class SpendingSummarizer:
@@ -44,11 +49,17 @@ class SpendingSummarizer:
     async def summarize(self, aggregates: dict) -> tuple[str, str]:
         """Return (summary, source) where source is "llm", "cache" or "fallback"."""
         payload = json.dumps(aggregates, sort_keys=True, default=str)
+        draft = self._fallback(aggregates)
+        # ClassificationCache groups merchant descriptions by their first two words.
+        # Reports need every aggregate in the key, including currency and period.
+        aggregate_key = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-        cached = await self.cache.get(payload)
-        if cached is not None and "summary" in cached:
+        cached = await self.cache.get(aggregate_key)
+        if cached is not None and valid_rewrite(
+            cached.get("summary"), draft=draft, facts=aggregates
+        ):
             LLM_CACHE.labels("hit").inc()
-            return str(cached["summary"]), "cache"
+            return cached["summary"], "cache"
         LLM_CACHE.labels("miss").inc()
 
         allowed, _retry_after = await self.rate_limiter.acquire()
@@ -57,19 +68,20 @@ class SpendingSummarizer:
             return self._fallback(aggregates), "fallback"
 
         try:
-            response = await self.client.complete_json(build_summary_messages(payload))
+            response = await self.client.complete_json(build_summary_messages(payload, draft=draft))
         except LLMError as exc:
             LLM_CALLS.labels("error").inc()
-            log.warning("summary_llm_failed_using_fallback", error=str(exc))
+            log.warning("summary_llm_failed_using_fallback", error_type=type(exc).__name__)
             return self._fallback(aggregates), "fallback"
 
-        summary = str(response.get("summary", "")).strip()
-        if not summary:
+        value = response.get("summary")
+        summary = value.strip() if isinstance(value, str) else ""
+        if not valid_rewrite(summary, draft=draft, facts=aggregates):
             LLM_CALLS.labels("invalid").inc()
             return self._fallback(aggregates), "fallback"
 
         LLM_CALLS.labels("success").inc()
-        await self.cache.set(payload, {"summary": summary})
+        await self.cache.set(aggregate_key, {"summary": summary})
         return summary, "llm"
 
     @staticmethod
@@ -80,4 +92,5 @@ class SpendingSummarizer:
             str(aggregates.get("period", "the period")),
             float(aggregates.get("total_spend", 0.0)),
             top,
+            currency=str(aggregates.get("currency", "USD")),
         )

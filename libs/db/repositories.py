@@ -43,7 +43,15 @@ class AccountRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get(self, account_id: str) -> Account | None:
+    async def get(self, account_id: str, *, for_update: bool = False) -> Account | None:
+        if for_update:
+            await self.session.flush()
+            return await self.session.scalar(
+                select(Account)
+                .where(Account.id == account_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
         return await self.session.get(Account, account_id)
 
     async def list_for_user(self, user_id: str) -> list[Account]:
@@ -65,12 +73,42 @@ class AccountRepository:
     async def adjust_balance(self, account: Account, delta: Decimal) -> None:
         account.balance = (account.balance or Decimal("0")) + delta
 
+    async def primary_currency(self, account_ids: list[str], *, default: str = "USD") -> str:
+        """The currency most of these accounts are held in; the oldest account breaks ties.
+
+        Reports total one currency at a time. Adding EUR to USD produces a number that is
+        not an amount of anything, so callers report in this currency and list the rest.
+        """
+        if not account_ids:
+            return default
+        result = await self.session.execute(
+            select(Account.currency)
+            .where(Account.id.in_(account_ids))
+            .order_by(Account.created_at, Account.id)
+        )
+        currencies = list(result.scalars())
+        if not currencies:
+            return default
+        counts: dict[str, int] = {}
+        for currency in currencies:
+            counts[currency] = counts.get(currency, 0) + 1
+        # max() keeps the first of equal counts, and the list is oldest-first.
+        return max(counts, key=lambda currency: counts[currency])
+
 
 class TransactionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get(self, transaction_id: str) -> Transaction | None:
+    async def get(self, transaction_id: str, *, for_update: bool = False) -> Transaction | None:
+        if for_update:
+            await self.session.flush()
+            return await self.session.scalar(
+                select(Transaction)
+                .where(Transaction.id == transaction_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
         return await self.session.get(Transaction, transaction_id)
 
     async def get_by_external_id(self, account_id: str, external_tx_id: str) -> Transaction | None:
@@ -144,10 +182,42 @@ class TransactionRepository:
         )
         return list((await self.session.execute(stmt)).scalars())
 
+    async def largest_outflows(
+        self,
+        *,
+        account_ids: list[str],
+        date_from: datetime,
+        date_to: datetime,
+        currency: str,
+        category: str | None = None,
+        limit: int = 3,
+    ) -> list[Transaction]:
+        """Filter the full ledger before ordering and limiting by outflow size."""
+        if not account_ids:
+            return []
+        stmt = (
+            self._base_query(
+                account_ids=account_ids, date_from=date_from, date_to=date_to, category=category
+            )
+            .where(Transaction.amount < 0, Transaction.currency == currency)
+            .order_by(Transaction.amount, Transaction.occurred_at.desc(), Transaction.id)
+            .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
     async def spend_by_category(
-        self, *, account_ids: list[str], date_from: datetime, date_to: datetime
+        self,
+        *,
+        account_ids: list[str],
+        date_from: datetime,
+        date_to: datetime,
+        currency: str | None = None,
     ) -> list[tuple[str | None, Decimal, int]]:
-        """Aggregate outflow per category. Only aggregates are ever sent to the LLM."""
+        """Aggregate outflow per category. Only aggregates are ever sent to the LLM.
+
+        Pass `currency` whenever the result is shown as one total: without it, amounts in
+        different currencies are summed together.
+        """
         if not account_ids:
             return []
         stmt = (
@@ -165,8 +235,29 @@ class TransactionRepository:
             .group_by(Transaction.category_slug)
             .order_by(func.sum(Transaction.amount))
         )
+        if currency is not None:
+            stmt = stmt.where(Transaction.currency == currency)
         rows = (await self.session.execute(stmt)).all()
         return [(slug, abs(Decimal(str(total))), int(count)) for slug, total, count in rows]
+
+    async def spend_currencies(
+        self, *, account_ids: list[str], date_from: datetime, date_to: datetime
+    ) -> list[str]:
+        """Distinct currencies with any outflow in the window, alphabetically."""
+        if not account_ids:
+            return []
+        stmt = (
+            select(Transaction.currency)
+            .where(
+                Transaction.account_id.in_(account_ids),
+                Transaction.occurred_at >= date_from,
+                Transaction.occurred_at <= date_to,
+                Transaction.amount < 0,
+            )
+            .distinct()
+            .order_by(Transaction.currency)
+        )
+        return list((await self.session.execute(stmt)).scalars())
 
     async def amount_stats(
         self, account_id: str, *, exclude_transaction_id: str | None = None
@@ -236,6 +327,16 @@ class NotificationRepository:
             .where(Notification.user_id == user_id)
             .order_by(Notification.created_at.desc())
             .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def pending_for_transaction(
+        self, *, user_id: str, transaction_id: str
+    ) -> list[Notification]:
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.transaction_id == transaction_id,
+            Notification.delivered_at.is_(None),
         )
         return list((await self.session.execute(stmt)).scalars())
 

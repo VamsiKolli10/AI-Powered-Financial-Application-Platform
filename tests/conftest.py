@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 os.environ.setdefault("ENVIRONMENT", "test")
@@ -29,6 +29,48 @@ from libs.db.session import get_session  # noqa: E402
 
 TEST_USER_ID = "usr_test"
 OTHER_USER_ID = "usr_other"
+
+
+def drain_workers_after_response(target_app):
+    """Service tests explicitly drain persisted work; production HTTP never waits.
+
+    Browser/Docker tests exercise real polling. These tests use the same claim,
+    enrichment and outbox implementation without scheduling timing dependencies.
+    """
+
+    async def drain(response: Response) -> None:
+        if target_app.title != "Transactions Service" or response.request.method != "POST":
+            return
+        if response.status_code not in (200, 202):
+            return
+        from services.transactions.workers import TransactionWorkers
+
+        workers = TransactionWorkers(
+            target_app.state.session_scope,
+            classifier=getattr(target_app.state, "classifier", None),
+            publisher=getattr(target_app.state, "publisher", None),
+        )
+        try:
+            while await workers.categorize_once():
+                pass
+            while await workers.publish_once():
+                pass
+        finally:
+            await workers.stop()
+
+    return drain
+
+
+def within_current_month(fraction: float = 0.5) -> datetime:
+    """A timestamp between the start of the current UTC month and now.
+
+    Reports default to "this month to date", so fixtures written as "N days ago" or as a
+    fixed date silently fall into the previous month on the 1st. `fraction` (0-1) keeps
+    relative order: 0.9 is later than 0.5.
+    """
+    now = datetime.now(UTC)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start + (now - start) * fraction
 
 
 @pytest.fixture
@@ -104,6 +146,7 @@ async def client(app, sessionmaker_, session) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         transport=transport,
         base_url="http://test",
+        event_hooks={"response": [drain_workers_after_response(app)]},
         headers={
             "X-Internal-Token": get_settings().internal_service_token,
             "X-User-Id": TEST_USER_ID,
@@ -145,6 +188,7 @@ async def make_client(sessionmaker_, session):
         client = AsyncClient(
             transport=ASGITransport(app=target_app),
             base_url="http://test",
+            event_hooks={"response": [drain_workers_after_response(target_app)]},
             headers={
                 "X-Internal-Token": get_settings().internal_service_token,
                 "X-User-Id": TEST_USER_ID,

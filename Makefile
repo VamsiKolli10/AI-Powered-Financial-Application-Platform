@@ -26,7 +26,7 @@ format:  ## Auto-fix lint and formatting
 migrate:  ## Apply database migrations
 	alembic upgrade head
 
-seed:  ## Load demo data
+seed:  ## Initialize the empty local workspace
 	python -m scripts.seed
 
 eval:  ## Categorization accuracy against the labeled sample (rules engine)
@@ -35,7 +35,7 @@ eval:  ## Categorization accuracy against the labeled sample (rules engine)
 smoke:  ## Smoke load test against a running gateway
 	python -m scripts.smoke_load --url http://localhost:8000 --requests 200 --concurrency 20
 
-up:  ## Start the whole platform locally
+up:  ## Initialize the local database and start the whole platform
 	docker compose up --build
 
 down:  ## Stop the platform
@@ -47,3 +47,12 @@ logs:  ## Tail service logs
 clean:  ## Remove caches and build artifacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage dist build
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+.PHONY: test-application eval-held-out eval-live
+test-application:
+	bash scripts/test_application.sh
+
+eval-held-out:
+	uv run python -m scripts.eval_quality
+
+eval-live:
+	uv run python -m scripts.eval_quality --live --output docs/evaluations/held-out-live.json

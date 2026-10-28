@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -15,6 +16,10 @@ class CategoryAmount(BaseModel):
 
 class SummaryResponse(BaseModel):
     period: str
+    date_from: datetime
+    date_to: datetime
+    # ISO 4217 code every amount in this response is in.
+    currency: str
     total_spend: Decimal
     by_category: list[CategoryAmount]
     summary: str
@@ -22,6 +27,8 @@ class SummaryResponse(BaseModel):
     # deterministic one instead of guessing.
     summary_source: str
     change_vs_previous_pct: float | None = None
+    # Currencies with spending in the period that are not included in the totals.
+    other_currencies: list[str] = []
 
 
 class TrendPoint(BaseModel):
@@ -31,4 +38,5 @@ class TrendPoint(BaseModel):
 
 
 class TrendsResponse(BaseModel):
+    currency: str
     periods: list[TrendPoint]

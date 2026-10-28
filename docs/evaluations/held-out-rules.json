@@ -1,0 +1,413 @@
+{
+  "evaluated_at": "2026-10-08T00:07:49.237628+00:00",
+  "dataset_sha256": "580f00822de53060aee1bcd6539882375c607ede5bab5d2cc0c439d63d21cb27",
+  "samples": 34,
+  "limitations": "Small synthetic semantic challenge set with provisional labels; not a population estimate. Provider routing and latency can vary. Empty cache at start; within-run cache hits are reported. No tuning on this set.",
+  "rules": {
+    "accuracy": 0.11764705882352941,
+    "macro_accuracy": 0.11764705882352941,
+    "per_category": {
+      "dining_coffee": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "education": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "electronics": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "entertainment": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "fees": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "fuel": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "groceries": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "health": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "housing": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "income": {
+        "correct": 2,
+        "support": 2,
+        "accuracy": 1.0
+      },
+      "other": {
+        "correct": 2,
+        "support": 2,
+        "accuracy": 1.0
+      },
+      "shopping": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "subscriptions": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "transfers": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "transport": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "travel": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      },
+      "utilities": {
+        "correct": 0,
+        "support": 2,
+        "accuracy": 0.0
+      }
+    },
+    "latency_ms": {
+      "p50": 0.21,
+      "p95": 1.53
+    },
+    "fallback_rate": 0.0,
+    "sources": {
+      "rules": 34
+    },
+    "outcomes": [
+      {
+        "description": "Hearthstone ramen supper",
+        "expected": "dining_coffee",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 13.83,
+        "error_type": null
+      },
+      {
+        "description": "Juniper espresso and pastries",
+        "expected": "dining_coffee",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.11,
+        "error_type": null
+      },
+      {
+        "description": "Cedar Valley fresh produce market",
+        "expected": "groceries",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.42,
+        "error_type": null
+      },
+      {
+        "description": "Harvest Basket weekly vegetables",
+        "expected": "groceries",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.2,
+        "error_type": null
+      },
+      {
+        "description": "Harbor ferry passenger fare",
+        "expected": "transport",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.18,
+        "error_type": null
+      },
+      {
+        "description": "CityLink bus fare",
+        "expected": "transport",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.13,
+        "error_type": null
+      },
+      {
+        "description": "Northstar petrol fill",
+        "expected": "fuel",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.18,
+        "error_type": null
+      },
+      {
+        "description": "Voltway EV charging session",
+        "expected": "fuel",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.17,
+        "error_type": null
+      },
+      {
+        "description": "Oak Terrace monthly residence lease",
+        "expected": "housing",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.21,
+        "error_type": null
+      },
+      {
+        "description": "Homeowners association assessment",
+        "expected": "housing",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.19,
+        "error_type": null
+      },
+      {
+        "description": "Municipal sewer and wastewater bill",
+        "expected": "utilities",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.52,
+        "error_type": null
+      },
+      {
+        "description": "Brightline broadband monthly bill",
+        "expected": "utilities",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 1.39,
+        "error_type": null
+      },
+      {
+        "description": "Meadow Lane winter jacket",
+        "expected": "shopping",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.57,
+        "error_type": null
+      },
+      {
+        "description": "Potters Corner ceramic dinner plates",
+        "expected": "shopping",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.23,
+        "error_type": null
+      },
+      {
+        "description": "Circuit Harbor laptop computer",
+        "expected": "electronics",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.15,
+        "error_type": null
+      },
+      {
+        "description": "Pixelworks wireless headphones",
+        "expected": "electronics",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.11,
+        "error_type": null
+      },
+      {
+        "description": "Moonlight bowling admission",
+        "expected": "entertainment",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.1,
+        "error_type": null
+      },
+      {
+        "description": "Riverside aquarium admission",
+        "expected": "entertainment",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.2,
+        "error_type": null
+      },
+      {
+        "description": "Seabreeze inn overnight lodging",
+        "expected": "travel",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.24,
+        "error_type": null
+      },
+      {
+        "description": "Skyward Airways passenger ticket",
+        "expected": "travel",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.37,
+        "error_type": null
+      },
+      {
+        "description": "Bayside physiotherapy appointment",
+        "expected": "health",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.58,
+        "error_type": null
+      },
+      {
+        "description": "Clearview eye examination",
+        "expected": "health",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 1.53,
+        "error_type": null
+      },
+      {
+        "description": "Lingua House language lessons",
+        "expected": "education",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.37,
+        "error_type": null
+      },
+      {
+        "description": "Codecraft programming course",
+        "expected": "education",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.31,
+        "error_type": null
+      },
+      {
+        "description": "CloudShelf storage monthly renewal",
+        "expected": "subscriptions",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.3,
+        "error_type": null
+      },
+      {
+        "description": "Readwise digital plan monthly renewal",
+        "expected": "subscriptions",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.26,
+        "error_type": null
+      },
+      {
+        "description": "Acme wages credit",
+        "expected": "income",
+        "predicted": "income",
+        "correct": true,
+        "source": "rules",
+        "latency_ms": 0.14,
+        "error_type": null
+      },
+      {
+        "description": "Client consulting payment received",
+        "expected": "income",
+        "predicted": "income",
+        "correct": true,
+        "source": "rules",
+        "latency_ms": 0.17,
+        "error_type": null
+      },
+      {
+        "description": "Move funds to my savings account",
+        "expected": "transfers",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.19,
+        "error_type": null
+      },
+      {
+        "description": "Move funds from my savings account",
+        "expected": "transfers",
+        "predicted": "income",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.21,
+        "error_type": null
+      },
+      {
+        "description": "Account maintenance charge",
+        "expected": "fees",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.33,
+        "error_type": null
+      },
+      {
+        "description": "Replacement debit card charge",
+        "expected": "fees",
+        "predicted": "other",
+        "correct": false,
+        "source": "rules",
+        "latency_ms": 0.12,
+        "error_type": null
+      },
+      {
+        "description": "Unrecognized card purchase",
+        "expected": "other",
+        "predicted": "other",
+        "correct": true,
+        "source": "rules",
+        "latency_ms": 0.06,
+        "error_type": null
+      },
+      {
+        "description": "Miscellaneous unidentified debit",
+        "expected": "other",
+        "predicted": "other",
+        "correct": true,
+        "source": "rules",
+        "latency_ms": 0.21,
+        "error_type": null
+      }
+    ]
+  }
+}

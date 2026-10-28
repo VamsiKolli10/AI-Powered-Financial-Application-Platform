@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+from libs.common.money import format_money
 from libs.db.categories import CATEGORY_NAMES
 from libs.db.models import NotificationType
 from libs.events.schemas import (
@@ -30,8 +31,7 @@ class Alert:
 
 
 def _money(amount: Decimal, currency: str = "USD") -> str:
-    symbol = {"USD": "$", "EUR": "€", "GBP": "£"}.get(currency, f"{currency} ")
-    return f"{symbol}{abs(amount):,.2f}"
+    return format_money(amount, currency)
 
 
 @dataclass(frozen=True)
@@ -96,8 +96,11 @@ def evaluate(
                     f"{_money(category_spend_this_month, event.currency)} this month."
                 ),
                 transaction_id=event.transaction_id,
-                # One budget alert per category per month, not per transaction.
-                dedupe_key=f"budget:{event.category}:{event.occurred_at:%Y-%m}",
+                # One alert per user, currency, category and month.
+                dedupe_key=(
+                    f"budget:{event.user_id}:{event.currency}:"
+                    f"{event.category}:{event.occurred_at:%Y-%m}"
+                ),
             )
         )
 

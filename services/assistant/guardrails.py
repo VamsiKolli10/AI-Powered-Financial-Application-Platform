@@ -21,13 +21,15 @@ _WRITE_INTENTS: list[tuple[re.Pattern[str], str]] = [
         "This assistant cannot move money. Money movement is out of scope for this platform.",
     ),
     (
-        re.compile(r"\b(pay|paying)\b.{0,20}\b(bill|card|invoice|balance|someone|rent)\b", re.I),
+        re.compile(
+            r"\b(pay|paying)\b.{0,20}\b(bills?|cards?|invoices?|balances?|someone|rent)\b", re.I
+        ),
         "This assistant cannot make payments. Money movement is out of scope for this platform.",
     ),
     (
         re.compile(
             r"\b(delete|remove|erase|undo|reverse|void)\b.{0,30}"
-            r"\b(transaction|payment|charge|record|account|history)\b",
+            r"\b(transactions?|payments?|charges?|records?|accounts?|histor(?:y|ies))\b",
             re.I,
         ),
         "This assistant cannot delete records. Transactions are immutable by design; "
@@ -36,14 +38,14 @@ _WRITE_INTENTS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(
             r"\b(change|update|edit|set|recategori[sz]e|fix)\b.{0,30}"
-            r"\b(category|categori[sz]ation|merchant|amount|transaction)\b",
+            r"\b(categor(?:y|ies)|categori[sz]ations?|merchants?|amounts?|transactions?)\b",
             re.I,
         ),
         "This assistant is read-only. Correct a category with " "PATCH /api/v1/transactions/{id}.",
     ),
     (
         re.compile(
-            r"\b(create|add|open|close|cancel)\b.{0,20}\b(account|transaction|budget)\b", re.I
+            r"\b(create|add|open|close|cancel)\b.{0,20}\b(accounts?|transactions?|budgets?)\b", re.I
         ),
         "This assistant is read-only. Use the Transactions API to add records.",
     ),

@@ -40,3 +40,8 @@ crash.log
 *.pem
 *.key
 .aws/
+
+# Files the Claude desktop app saves from chat sessions
+Claude outputs/
+web/test-results/
+web/playwright-report/

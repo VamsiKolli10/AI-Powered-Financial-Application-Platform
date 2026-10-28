@@ -1,3 +1,11 @@
+export type Me = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
+export type Account = { id: string; name: string; currency: string };
+
 export type Transaction = {
   id: string;
   account_id: string;
@@ -17,6 +25,13 @@ export type TransactionPage = {
   limit: number;
 };
 
+/** Every transaction in a reporting period, gathered across pages. */
+export type PeriodTransactions = {
+  items: Transaction[];
+  /** True when the page cap was hit and older transactions in the period were not loaded. */
+  truncated: boolean;
+};
+
 export type CategoryAmount = {
   category: string;
   amount: string;
@@ -25,11 +40,23 @@ export type CategoryAmount = {
 
 export type Summary = {
   period: string;
+  date_from: string;
+  date_to: string;
+  /** ISO 4217 code every amount in the summary is in. */
+  currency: string;
   total_spend: string;
   by_category: CategoryAmount[];
   summary: string;
   summary_source: string;
   change_vs_previous_pct: number | null;
+  /** Currencies with spending in the period that the totals leave out. */
+  other_currencies: string[];
+};
+
+export type PlatformStatus = {
+  status: "ok" | "degraded";
+  services: Record<string, "ok" | "unavailable">;
+  checked_at: string;
 };
 
 export type Notification = {
@@ -49,4 +76,11 @@ export type ChatResponse = {
   conversation_id: string;
   reply: string;
   reply_source: string;
+  fallback_reason?: string | null;
+};
+
+export type AssistantStatus = {
+  mode: "llm" | "disabled" | "unconfigured";
+  model: string | null;
+  message: string;
 };

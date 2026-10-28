@@ -53,12 +53,16 @@ API endpoint:
 ./scripts/deploy-aws.sh
 ```
 
-The script builds immutable images, pushes them to ECR, reads the application secret without
+The script builds `linux/amd64` images for the configured x86_64 EKS nodes, including from ARM
+hosts (which need Docker's cross-platform build support). It pushes them to ECR, reads the application secret without
 printing it, creates the Kubernetes Secret, injects the MSK endpoint, applies the AWS Kustomize
-overlay, runs Alembic, and waits for the gateway and dashboard rollouts.
+overlay, runs Alembic, and waits for the gateway and dashboard rollouts. Migrations initialize
+the canonical category taxonomy on a fresh database without creating a demo user or transactions.
 
 The AWS overlay removes the local PostgreSQL, Redis, and Kafka workloads. Application pods use RDS,
-ElastiCache, and MSK instead. MSK traffic uses `SASL_SSL` with SCRAM-SHA-512; Redis uses TLS.
+ElastiCache, and MSK instead. MSK traffic uses `SASL_SSL` with SCRAM-SHA-512 and certificate
+verification; its security group permits internal broker traffic from itself and client traffic
+from EKS on port 9096. Redis uses TLS.
 
 ### Rollback
 
